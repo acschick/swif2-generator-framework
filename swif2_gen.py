@@ -98,7 +98,7 @@ def detect_generator_type(config_file, explicit_generator=None):
     )
 
 
-def get_generator_module(generator_type, config_file_abs):
+def get_generator_module(generator_type, config_file_abs, extra_args=None):
     """
     Import and return the appropriate generator module.
     
@@ -107,6 +107,7 @@ def get_generator_module(generator_type, config_file_abs):
     Args:
         generator_type (str): Generator type (e.g., 'RBHG', 'SPIZG')
         config_file_abs (str): Absolute path to config file
+        extra_args (list): Additional command line arguments to pass to generator (e.g., ['--interactive'])
     
     Returns:
         module: The generator's Python module
@@ -137,6 +138,10 @@ def get_generator_module(generator_type, config_file_abs):
         # Set sys.argv BEFORE importing so the generator's module-level code
         # can parse command line arguments correctly
         sys.argv = [f'swif2_{generator_type}.py', '--config', config_file_abs]
+        
+        # Add any extra arguments (e.g., --interactive, --local)
+        if extra_args:
+            sys.argv.extend(extra_args)
         
         # Import the generator module
         # e.g., "from RBHG import swif2_RBHG"
@@ -191,7 +196,8 @@ def main():
         epilog="""
 Examples:
     python swif2_gen.py RBHG.config
-    python swif2_gen.py SPIZG.config
+    python swif2_gen.py RBHG.config --interactive
+    python swif2_gen.py SPIZG.config --local
     python swif2_gen.py --generator RBHG myconfig.config
     python swif2_gen.py --help
 
@@ -207,6 +213,11 @@ See GeneratorConfigExamples/ for templates.
                        help='Explicitly specify generator type (RBHG, SPIZG, etc.)',
                        default=None)
     
+    parser.add_argument('--interactive', '--local',
+                       action='store_true',
+                       dest='interactive',
+                       help='Run jobs locally instead of submitting to SWIF2')
+    
     args = parser.parse_args()
     
     # Validate config file exists
@@ -217,12 +228,17 @@ See GeneratorConfigExamples/ for templates.
     # Convert to absolute path once at the start
     config_file_abs = os.path.abspath(args.config_file)
     
+    # Build extra args to pass to generator
+    extra_args = []
+    if args.interactive:
+        extra_args.append('--interactive')
+    
     try:
         # Step 1: Detect generator type
         generator_type = detect_generator_type(config_file_abs, args.generator)
         
         # Step 2: Load generator module (sets sys.argv before import so config loads correctly)
-        generator_module = get_generator_module(generator_type, config_file_abs)
+        generator_module = get_generator_module(generator_type, config_file_abs, extra_args)
         
         # Step 3: Run generator (if it has a main function; otherwise already ran on import)
         run_generator(generator_module, config_file_abs, args)
