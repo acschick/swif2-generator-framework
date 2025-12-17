@@ -1,0 +1,136 @@
+{
+  "rbhg_config": {
+    "version": "1.0",
+    "generation_info": {
+      "study_name": "v113_norad",
+      "nametag": "A3",
+      "study_type": "v113_norad",
+      "timestamp": "2025-12-17T16:48:36.696419",
+      "generator_version": "v113",
+      "script_version": "swif2_RBHG.py"
+    },
+    "physics_settings": {
+      "experiment": "GlueX",
+      "lepton_type": "ee",
+      "xsection_model": "Berlin",
+      "form_factor": "FFN",
+      "polarization_deg": "90",
+      "run_period": null,
+      "run_number": null,
+      "target": "p",
+      "internal_radiation": true,
+      "single_radiation": false,
+      "hypgeom_radiation": false,
+      "radiation_mode": "DBLRAD",
+      "coherent_brems": true,
+      "experiment_parameters": {
+        "photon_energy_min_GeV": 7.0,
+        "photon_energy_max_GeV": 11.4,
+        "target_atomic_number": 1,
+        "electron_beam_energy_GeV": 11.4,
+        "coherent_peak_edge_GeV": 8.8,
+        "polarization_fraction": 1.0,
+        "theta_min_deg": 0.75,
+        "theta_max_deg": 14.0
+      }
+    },
+    "event_counts": {
+      "total_events": 5000,
+      "events_per_file": 5000,
+      "total_jobs": 1,
+      "mode": "fixed_count",
+      "tenx_flag": false
+    },
+    "output_settings": {
+      "histograms": {
+        "invariant_mass": true,
+        "energy_fraction": true,
+        "mandelstam_t": true,
+        "t_variable_bins": true,
+        "elasticity": true,
+        "missing_mass": true,
+        "theta": true,
+        "phi_of_JT": true,
+        "egamma": true
+      },
+      "ascii_output": true,
+      "hddm_output": true,
+      "integral_xsection": true,
+      "verbose_output": true
+    },
+    "directory_paths": {
+      "base_paths": {
+        "rbhg_home": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework",
+        "farm_out_base": "/farm_out/acschick/RBHG/v113_norad",
+        "output_base": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG"
+      },
+      "workflow_name": "v113_norad_A3_FFN_90DEG_ee",
+      "rbhg_generation": {
+        "output_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113",
+        "vectors_hddm_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/vectors",
+        "histograms_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/hists",
+        "fortran_files_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/FortranFiles",
+        "template_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/generators/RBHG/template_RBHG",
+        "farm_logs": "generation/v113_norad_A3_FFN_90DEG_ee"
+      },
+      "downstream_analysis": {
+        "mcwrapper_simulation": {
+          "output_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/simulation",
+          "trees_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/simulation/trees",
+          "hists_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/simulation/hists",
+          "rest_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/simulation/rest",
+          "input_hddm_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/vectors"
+        },
+        "dselector_analysis": {
+          "output_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/DSelector",
+          "trees_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/DSelector/trees",
+          "hists_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/DSelector/hists",
+          "input_trees_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/simulation/trees"
+        },
+        "tmva_analysis": {
+          "output_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/TMVA",
+          "models_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/TMVA/models",
+          "results_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/TMVA/results",
+          "input_trees_directory": "/volatile/halld/home/acschick/RBHG/v113_norad/A3_FFN/90DEG_DBLRAD/DSelector/trees"
+        }
+      },
+      "pipeline_farm_logs": {
+        "generation": "generation/v113_norad_A3_FFN_90DEG_ee",
+        "simulation": "simulation/v113_norad_A3_FFN_90DEG_ee",
+        "dselector": "DSelector/v113_norad_A3_FFN_90DEG_ee",
+        "tmva": "TMVA/v113_norad_A3_FFN_90DEG_ee",
+        "analysis_hists": "analysis_hists/v113_norad_A3_FFN_90DEG_ee"
+      },
+      "swif2_workflow_names": {
+        "generation": "gen_v113_norad_A3_FFN__90DEG_ee",
+        "simulation": "sim_v113_norad_A3_FFN__90DEG_ee",
+        "dselector": "dsel_v113_norad_A3_FFN__90DEG_ee",
+        "tmva": "tmva_v113_norad_A3_FFN__90DEG_ee",
+        "analysis_hists": "hist_v113_norad_A3_FFN__90DEG_ee"
+      },
+      "templates": {
+        "rbhg_template_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/generators/RBHG/template_RBHG",
+        "mcwrapper_template_directory": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/template_MCWrapper"
+      },
+      "scripts": {
+        "ascii2hddm_script": "/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/hddm_scripts/ascii2hddm.py"
+      }
+    },
+    "downstream_configs": {
+      "mc_simulation": {
+        "events_per_mc_file": 5000,
+        "target": "p",
+        "input_hddm_pattern": "vectors_*.hddm",
+        "expected_input_files": 1
+      }
+    },
+    "mcwrapper_settings": {},
+    "job_parameters": [
+      {
+        "job_i": 0,
+        "seed": 1351000914,
+        "nevents": "5000"
+      }
+    ]
+  }
+}

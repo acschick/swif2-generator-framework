@@ -99,7 +99,7 @@ c
 	integer :: num_args, arg_seed_int, arg_jobnum_int, arg_nevents_int
 
 	data itest(1),itest(2),itest(3),itest(4),nevent 
-     &	/100000,1000000,10000000,100000000,RBHGNEVENTS/  !the variable nevent is where you set the number of output events.
+     &	/100000,1000000,10000000,100000000,5000/  !the variable nevent is where you set the number of output events.
 	data m_e,m_muon,m_pi,hbarc /0.00051099,0.105658,0.139570,0.197326/
 c	
 c  Histogram parameters
@@ -178,7 +178,7 @@ c	  Argument 1: Random seed (integer)
 c	  Argument 2: Job number (integer, used in output filenames)
 c	  Argument 3: Number of events to generate (integer)
 c
-c	The compiled-in values RBHGSEEDVALUE, RBHGJOBNUMBER, RBHGNEVENTS
+c	The compiled-in values 1351000914, 0, 5000
 c	represent the FIRST job's parameters (job 0). When running multiple
 c	jobs with the same executable, pass different arguments to each job.
 c	
@@ -213,7 +213,7 @@ c	Usage: ./lepton_event_v113.exe <seed> <job_num> <nevents>
 	else
 		! No args: use system clock for random seed (iseed=0 triggers clock-based seeding)
 		iseed = 0
-		arg_jobnum_int = RBHGJOBNUMBER
+		arg_jobnum_int = 0
 		print *, 'Using compiled defaults: seed=CLOCK', 
      &           ' job=', arg_jobnum_int, ' nevents=', nevent
 	endif
@@ -226,48 +226,48 @@ c
 c  Start logical assignments
 c
 c******* Histogram output control
-	hist_w        =RBHGHIST_W
-	hist_x        =RBHGHIST_X
-	hist_t        =RBHGHIST_T
-	hist_elasticity =RBHGHIST_ELASTICITY
-	hist_mm         =RBHGHIST_MM
-	hist_theta    =RBHGHIST_THETA
-	hist_phi_JT    =RBHGHIST_PHI_JT
-	hist_t_variable    =RBHGHIST_T_VARIABLE
-	hist_Egamma    =RBHGHIST_EGAMMA
-	output_event    =RBHGOUTPUT_EVENT
+	hist_w        =.true.
+	hist_x        =.true.
+	hist_t        =.true.
+	hist_elasticity =.true.
+	hist_mm         =.true.
+	hist_theta    =.true.
+	hist_phi_JT    =.true.
+	hist_t_variable    =.true.
+	hist_Egamma    =.true.
+	output_event    =.true.
 c*******Output control
-	integral_xsctn    =RBHGINTEGRAL_XSCTN
-	verbose_output    =RBHGVERBOSE_OUTPUT
+	integral_xsctn    =.true.
+	verbose_output    =.true.
 c****** The B.H. cross section: only one of the following 3 logicals should be true
-	bakmaev        =RBHGBAKMAEV
-	heitler        =RBHGHEITLER
-	berlin        =RBHGBERLIN
+	bakmaev        =.false.
+	heitler        =.false.
+	berlin        =.true.
 c****** Setting run conditions: polarization direction, Brem type, and GlueX or CPP
-	para        =RBHGPARA
-	zero_ninety    =RBHGZERO_NINETY
-	cobrems        =RBHGCOBREMS
-	cobrems_varbin =RBHGCOBREMS_VARBIN
+	para        =.false.
+	zero_ninety    =.true.
+	cobrems        =.true.
+	cobrems_varbin =.true.
 	if (.not.cobrems) pol=0. !fixes a possible problem, incoherent Brem is necessarily unpolarized
-	GlueX        =RBHGGLUEX
+	GlueX        =.true.
 c*******e+e- or mu+mu-
-	electron        =RBHGELECTRON
+	electron        =.true.
 	muon=.not.electron	!true if electron=.false.
 c*******	Radiation control
-	radiation    =RBHGRADIATION
+	radiation    =.true.
 	if (muon) radiation =.false. !if muon then turn off internal radiation
-	single_radiation	=RBHGSINGLE_RAD	!if true then only one lepton radiates, if false then both leptons radiate
-	hypgeom_radiation	=RBHGHYPGEOM	!future: hypergeometric radiation for muons
+	single_radiation	=.false.	!if true then only one lepton radiates, if false then both leptons radiate
+	hypgeom_radiation	=.false.	!future: hypergeometric radiation for muons
 c******* Form factor choice
-	nuc_FF        =RBHGNUC_FF	!set true for nuclear form factor, set false for FF=1
+	nuc_FF        =.true.	!set true for nuclear form factor, set false for FF=1
 C       
 c       End logical assignments
 c       
-	genDir = 'RBHGHOMEDIRECTORY'
+	genDir = '/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/generators'
 	outputDirTop = 
-     &  'RBHGOUTPUTDIRTOP'
-	vectors = trim(outputDirTop) // 'RBHGVECTORSPATH'
-	hists = trim(outputDirTop) // 'RBHGHISTSPATH'
+     &  '/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/output/RBHG'
+	vectors = trim(outputDirTop) // '/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/vectors'
+	hists = trim(outputDirTop) // '/v113_norad/A3_FFN/5kEvents_90DEG_DBLRAD_GlueX_ee_Berlin_v113/hists'
 	
 	! Build output filenames using job number (from cmdline or compiled-in)
 	write(arg_jobnum, '(I0)') arg_jobnum_int
@@ -290,24 +290,24 @@ c
 
 c*******Set run conditions to either GlueX or CPP
 	if (GlueX) then
-	   E_lo=RBHG_ELO_GLUEX	!tagging interval
-	   E_hi=RBHG_EHI_GLUEX
-	   ztgt=RBHG_ZTGT_GLUEX
-	   E0=RBHG_E0_GLUEX
-	   E_coherent=RBHG_ECOHERENT_GLUEX
-	   pol=RBHG_POL_GLUEX
-	   theta_min=RBHG_THETAMIN_GLUEX
-	   theta_max=RBHG_THETAMAX_GLUEX
+	   E_lo=7.0	!tagging interval
+	   E_hi=11.4
+	   ztgt=1
+	   E0=11.4
+	   E_coherent=8.8
+	   pol=1.0
+	   theta_min=0.75
+	   theta_max=14
 c       
 	else			!then CPP
-	   E_lo=RBHG_ELO_CPP
-	   E_hi=RBHG_EHI_CPP
-	   ztgt=RBHG_ZTGT_CPP
-	   E0=RBHG_E0_CPP
-	   E_coherent=RBHG_ECOHERENT_CPP
-	   pol=RBHG_POL_CPP
-	   theta_min=RBHG_THETAMIN_CPP
-	   theta_max=RBHG_THETAMAX_CPP
+	   E_lo=4.5
+	   E_hi=6.0
+	   ztgt=82
+	   E0=11.0
+	   E_coherent=5.7
+	   pol=1.0
+	   theta_min=0.3
+	   theta_max=7
 	end if
 C       
 c       .  Set target mass in GeV
@@ -902,7 +902,7 @@ c     !      cobremsCPP_var, templateDir)
 		! genDir is now framework/generators, so we can build both paths:
 		! - Template: framework/generators/RBHG/template_RBHG/
 		! - Cobrems: framework/generators/CobremsDistributions/
-		genDir2 = 'RBHGHOMEDIRECTORY'
+		genDir2 = '/w/halld-scshelf2101/home/acschick/channels/epemmissprot/newRBHG/RBHG/swif2-generator-framework/generators'
 		cobremsDir = trim(genDir2) // '/CobremsDistributions/'
 		
 		! Select file names once at initialization to avoid repeating selection and prints
@@ -2181,7 +2181,7 @@ c*******************************************************************
 	
 	! Get user overrides from regex replacements
 	! This will be a relative path like ./CobremsDistribution_12345_0deg_varbin.dat
-	override_file = 'RBHGCOBREMS_FILE_OVERRIDE'
+	override_file = 'cbrem_50699_90deg_rcdb.dat'
 	
 	! Determine experiment name and polarization suffix for future use
 	if (GlueX) then

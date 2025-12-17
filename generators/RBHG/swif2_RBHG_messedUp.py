@@ -42,7 +42,13 @@ def load_config(config_file="RBHG.config"):
     Lines starting with # are comments and ignored
     """
     config = {}
-    config_path = os.path.join(os.path.dirname(__file__), config_file)
+    
+    # If config_file is an absolute path, use it directly
+    # Otherwise, look for it relative to this script's directory
+    if os.path.isabs(config_file):
+        config_path = config_file
+    else:
+        config_path = os.path.join(os.path.dirname(__file__), config_file)
     
     if not os.path.exists(config_path):
         print(f"Warning: Config file {config_path} not found. Using defaults.")
@@ -100,33 +106,57 @@ def load_config(config_file="RBHG.config"):
 config = load_config(CONFIG_FILE)
 
 def get_config(key, default=None):
-    """Get a configuration value with optional default."""
-    return config.get(key, default)
+    """Get a configuration value with optional default. Returns default if key not found or value is empty."""
+    value = config.get(key, default)
+    # If value is empty string or None, use default
+    if not value and default is not None:
+        return default
+    return value
+
+
+def replace_path_placeholders(path_string, generator_type, username, framework_home):
+    """
+    Replace placeholders in path strings with actual values.
+    
+    Args:
+        path_string: Path string potentially containing {GENERATOR_TYPE}, {USERNAME}, {FRAMEWORK_HOME}
+        generator_type: Generator type (e.g., 'RBHG', 'SPIZG')
+        username: Username for paths
+        framework_home: Framework home directory path
+        
+    Returns:
+        Path string with placeholders replaced
+    """
+    if not isinstance(path_string, str):
+        return path_string
+    
+    replacements = {
+        '{GENERATOR_TYPE}': generator_type,
+        '{USERNAME}': username,
+        '{FRAMEWORK_HOME}': framework_home
+    }
+    
+    result = path_string
+    for placeholder, value in replacements.items():
+        result = result.replace(placeholder, value)
+    
+    return result
 
 
 #############################################################################
 ############################ swif2_RBHG.py ##################################
 #############################################################################
 
-# Framework directory structure:
-# Read from config file (FRAMEWORK_HOME). This is the root of swif2-generator-framework/
-# If not set in config, auto-detect from script location (two directories up)
-config_framework_home = get_config("FRAMEWORK_HOME", "")
-if config_framework_home:
-    FrameworkHomeDirectory = os.path.abspath(config_framework_home)
-else:
-    # Auto-detect: this script is in generators/RBHG/, so go up two levels
-    FrameworkHomeDirectory = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# Framework home directory (root of swif2-generator-framework)
+# In the new framework structure, this should point to the swif2-generator-framework root
+# Default: three directories up from this script (generators/RBHG/swif2_RBHG.py -> framework root)
+FrameworkHomeDirectory = get_config("FRAMEWORK_HOME", os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-# Directory structure within framework:
-# - Template files: {FrameworkHomeDirectory}/generators/RBHG/template_RBHG/
-# - Cobrems files: {FrameworkHomeDirectory}/generators/CobremsDistributions/
-# - Output: {FrameworkHomeDirectory}/output/RBHG/
-# - HDDM scripts: {FrameworkHomeDirectory}/hddm_scripts/
-RBHGHomeDirectory = FrameworkHomeDirectory  # For compatibility with old code
+# Generator type (for directory paths)
+GENERATOR_TYPE = get_config("GENERATOR_TYPE", "RBHG")
 
-# Template files and scripts (relative paths will be joined with template_directory)
-#####################################################################################
+# Files in {FrameworkHomeDirectory}/generators/RBHG/template_RBHG/
+###################################################
 ## a.) The template file version that will be edited and compiled into an .exe:
 temp_fortran_file = get_config("FORTRAN_TEMPLATE", "temp_lepton_event_v113.f")
 ## b.) The bash script that constitutes the swif job:
@@ -134,8 +164,8 @@ if INTERACTIVE_MODE:
     RBHG_script = get_config("JOB_SCRIPT_INTERACTIVE", "swif2_RBHG_script_interactive.sh")
 else:
     RBHG_script = get_config("JOB_SCRIPT", "swif2_RBHG_script.sh")
-## c.) The python script that converts output vectors to hddm file
-ascii2hddm_script = os.path.join(RBHGHomeDirectory, get_config("ASCII2HDDM_SCRIPT", "hddm_scripts/ascii2hddm.py"))
+## c.) The python script that converts output vectors to hddm file (centralized)
+ascii2hddm_script = os.path.join(FrameworkHomeDirectory, "hddm_scripts", "ascii2hddm.py")
 
 # Environment file used by farm job:
 ENVFILE = get_config("ENV_FILE", "/group/halld/www/halldweb/html/halld_versions/version_6.5.0.xml")
@@ -367,8 +397,7 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
     # Load RunPeriods.json data for MCWrapper settings if run_period and polarization available
     mcwrapper_settings = {}
     if run_period and polarization and directories:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        rp_data = load_runperiods_data(run_period, polarization, script_dir)
+        rp_data = load_runperiods_data(run_period, polarization, FrameworkHomeDirectory)
         
         if rp_data:
             # Use explicit overrides from RBHG.config if set, otherwise use RunPeriods.json defaults
@@ -434,7 +463,10 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
         gen_output_parent = os.path.dirname(directories['output_directory'])
         
         # Process each output directory configuration
-        mcwrapper_base = get_config("MCWRAPPER_OUTPUT_DIR_BASE", "/volatile/halld/home/acschick/RBHG/")
+        mcwrapper_base = replace_path_placeholders(
+            get_config("MCWRAPPER_OUTPUT_DIR_BASE", "/volatile/halld/home/{USERNAME}/{GENERATOR_TYPE}/"),
+            GENERATOR_TYPE, CUEusername, FrameworkHomeDirectory
+        )
         dselector_base = get_config("DSELECTOR_OUTPUT_DIR_BASE", "SIBLING")
         tmva_base = get_config("TMVA_OUTPUT_DIR_BASE", "SIBLING")
         
@@ -540,9 +572,10 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
             },
             "directory_paths": {
                 "base_paths": {
-                    "rbhg_home": os.path.dirname(os.path.dirname(os.path.dirname(directories['template_directory']))) if directories else None,  # Framework root (3 levels up from template_RBHG)
-                    "farm_out_base": f"/farm_out/{os.getenv('USER', 'acschick')}/RBHG/{study_name}" if directories else None,
-                    "output_base": os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(directories['template_directory']))), "output/RBHG") if directories else None  # Framework root + output/RBHG
+                    "framework_home": FrameworkHomeDirectory if directories else None,
+                    "generator_type": GENERATOR_TYPE if directories else None,
+                    "farm_out_base": f"/farm_out/{os.getenv('USER', 'acschick')}/{GENERATOR_TYPE}/{study_name}" if directories else None,
+                    "output_base": os.path.join(FrameworkHomeDirectory, "output", GENERATOR_TYPE) if directories else None
                 },
                 "workflow_name": f"{study_name}_{nametag}_{form_factor}_{PolDeg}DEG_{lepton}" if directories else None,
                 "rbhg_generation": {
@@ -570,10 +603,10 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
                 },
                 "templates": {
                     "rbhg_template_directory": directories['template_directory'] if directories else None,
-                    "mcwrapper_template_directory": os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(directories['template_directory']))), "template_MCWrapper") if directories else None  # Framework root + template_MCWrapper
+                    "mcwrapper_template_directory": os.path.join(os.path.dirname(directories['template_directory']), "template_MCWrapper") if directories else None
                 },
                 "scripts": {
-                    "ascii2hddm_script": os.path.join(RBHGHomeDirectory, "hddm_scripts/ascii2hddm.py") if directories else None
+                    "ascii2hddm_script": ascii2hddm_script
                 }
             },
             "downstream_configs": {
@@ -786,14 +819,14 @@ def write_run_period_master_config(master_config, study_name, dataset_name, form
     print(f"Run period master configuration saved to: {master_config_file}")
     return master_config_file
 
-def load_runperiods_data(run_period, polarization, rbhg_home_dir):
+def load_runperiods_data(run_period, polarization, framework_home_dir):
     """
     Load data from RunPeriods.json for a specific run period and polarization.
     Returns a dict with polarization-specific and run-period-level data, or None if not found.
     """
     try:
         import json
-        runperiods_path = os.path.join(rbhg_home_dir, 'RunPeriods.json')
+        runperiods_path = os.path.join(framework_home_dir, 'RunPeriods.json')
         if not os.path.exists(runperiods_path):
             print(f"Warning: RunPeriods.json not found at {runperiods_path}")
             return None
@@ -878,16 +911,13 @@ nevents = {
 if not FIXED_EVENT_COUNT and RUN_PERIOD:
     print("FIXED_EVENT_COUNT is False - loading event counts from RunPeriods.json...")
     try:
-        # Get RBHG home directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        
         # Load event counts for each run period and polarization
         for run_period_key in list(nevents.keys()):
             for pol_key in list(nevents[run_period_key].keys()):
                 # Create full run_period string with potential suffixes
                 full_run_period = RUN_PERIOD if RUN_PERIOD else run_period_key
                 
-                rp_data = load_runperiods_data(run_period_key, pol_key, script_dir)
+                rp_data = load_runperiods_data(run_period_key, pol_key, FrameworkHomeDirectory)
                 if rp_data and rp_data.get("epem_event_count"):
                     event_count = rp_data["epem_event_count"]
                     # Convert to int (might be string in JSON)
@@ -1198,20 +1228,25 @@ def make_generation_dirname(study_name, nametag, form_factor, PolDeg, run_period
     return directory_name
 
 
-def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logicals, run_period=None, polarization=None):
-    # RBHGHomeDirectory is now the framework root directory
-    outputDirectoryTop = os.path.join(RBHGHomeDirectory, "output/RBHG")
-    template_directory = os.path.join(RBHGHomeDirectory, "generators/RBHG/template_RBHG")
-    cobrems_directory = os.path.join(RBHGHomeDirectory, "generators/CobremsDistributions")
+def make_all_gen_directories(FrameworkHomeDirectory, gen_dir_name, CUEusername, logicals, run_period=None, polarization=None):
+    outputDirectoryTop = os.path.join(FrameworkHomeDirectory, "output")
+    template_directory = os.path.join(FrameworkHomeDirectory, "generators", "RBHG", "template_RBHG")
     check_directory(template_directory)
-    check_directory(outputDirectoryTop)
-    gen_output_directory = os.path.join(outputDirectoryTop, gen_dir_name)
+    # Create output directory and generator-specific subdirectory if they don't exist
+    create_ifnot_directory(outputDirectoryTop)
+    outputDirectoryGenerator = os.path.join(outputDirectoryTop, GENERATOR_TYPE)
+    create_ifnot_directory(outputDirectoryGenerator)
+    gen_output_directory = os.path.join(outputDirectoryGenerator, gen_dir_name)
     # Extract study name from gen_dir_name for farm_out structure
     study_name_from_dir = gen_dir_name.split('/')[0]  # First part of path is study name
     workflow_name_base = '_'.join(gen_dir_name.split('/')[1:])  # Rest becomes workflow name
-    farm_out_directory = os.path.join(f"/farm_out/{CUEusername}/RBHG/{study_name_from_dir}/generation", workflow_name_base)
+    # Extract study name from gen_dir_name for farm_out structure
+    study_name_from_dir = gen_dir_name.split('/')[0]  # First part of path is study name
+    workflow_name_base = '_'.join(gen_dir_name.split('/')[1:])  # Rest becomes workflow name
+    farm_out_directory = os.path.join(f"/farm_out/{CUEusername}/{GENERATOR_TYPE}/{study_name_from_dir}/generation", workflow_name_base)
     
     out_dir = create_directory_plusone(gen_output_directory)
+    out_dir = os.path.abspath(out_dir)  # Ensure absolute path
     sub_dir = os.path.join(f"{out_dir}", "FortranFiles")
     create_ifnot_directory(sub_dir)
     farm_out_dir = create_directory_plusone(farm_out_directory)
@@ -1220,16 +1255,19 @@ def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logic
     dir_name = gen_output_directory    
     Directories = {
         'logpath': farm_out_dir,
-        'vectorspath': os.path.join(out_dir, 'vectors'),
-        'histspath': os.path.join(out_dir, 'hists'),
+        'vectorspath': os.path.abspath(os.path.join(out_dir, 'vectors')),  # Absolute path for interactive mode
+        'histspath': os.path.abspath(os.path.join(out_dir, 'hists')),      # Absolute path for interactive mode
     }
 
 
     RBHGOUTPUTDICT = {
-        "RBHGHOMEDIRECTORY": os.path.join(RBHGHomeDirectory, "generators"),  # Fortran appends '/CobremsDistributions/' for cobrems files
-        "RBHGOUTPUTDIRTOP": outputDirectoryTop,
-        "RBHGVECTORSPATH": Directories["vectorspath"].replace(outputDirectoryTop, ''),        # fortran has line length limit--had to break up paths to make it fit (hence replace)
-        "RBHGHISTSPATH": Directories["histspath"].replace(outputDirectoryTop, '')             # fixed length limit problem again.
+        "RBHGHOMEDIRECTORY": FrameworkHomeDirectory,  # Framework root directory
+        "RBHGTEMPLATEDIR": os.path.join(FrameworkHomeDirectory, f"generators/{GENERATOR_TYPE}/template_{GENERATOR_TYPE}/"),  # Generator-specific template directory
+        "RBHGCOBREMSDIR": os.path.join(FrameworkHomeDirectory, "generators/CobremsDistributions/"),  # Shared cobrems directory
+        "FRAMEWORKHOMEDIRECTORY": FrameworkHomeDirectory,
+        "RBHGOUTPUTDIRTOP": "",  # Empty since we'll use absolute paths
+        "RBHGVECTORSPATH": Directories["vectorspath"],        # Absolute path
+        "RBHGHISTSPATH": Directories["histspath"]             # Absolute path
     }
 
     # Check if RBHGOUTPUT_EVENT is ".false."                                                                                                                 
@@ -1261,17 +1299,17 @@ def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logic
     
     if CobremsFileGlueX.strip():
         # User explicitly specified a file in RBHG.config
-        cobrems_source_path = CobremsFileGlueX if os.path.isabs(CobremsFileGlueX) else os.path.join(RBHGHomeDirectory, CobremsFileGlueX)
+        cobrems_source_path = CobremsFileGlueX if os.path.isabs(CobremsFileGlueX) else os.path.join(FrameworkHomeDirectory, CobremsFileGlueX)
     elif CobremsFileCPP.strip():
         # User explicitly specified a file in RBHG.config
-        cobrems_source_path = CobremsFileCPP if os.path.isabs(CobremsFileCPP) else os.path.join(RBHGHomeDirectory, CobremsFileCPP)
+        cobrems_source_path = CobremsFileCPP if os.path.isabs(CobremsFileCPP) else os.path.join(FrameworkHomeDirectory, CobremsFileCPP)
     elif run_period or DEFAULT_RUN_PERIOD:
         # Use explicit run_period or DEFAULT_RUN_PERIOD for cobrems lookup
         lookup_period = run_period if run_period else DEFAULT_RUN_PERIOD
         # No override in config - look up from RunPeriods.json
         try:
             import json
-            runperiods_path = os.path.join(RBHGHomeDirectory, 'RunPeriods.json')
+            runperiods_path = os.path.join(FrameworkHomeDirectory, 'RunPeriods.json')
             if os.path.exists(runperiods_path):
                 with open(runperiods_path, 'r') as f:
                     runperiods_data = json.load(f)
@@ -1304,14 +1342,15 @@ def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logic
         print(f"  Falling back to 1/E distribution for now.")
         # Don't set a cobrems file - Fortran will use 1/E
     
-    # If we have a cobrems file, copy it to the shared CobremsDistributions directory
+    # If we have a cobrems file, copy it to CobremsDistributions subdirectory in template_RBHG
     if cobrems_source_path and os.path.exists(cobrems_source_path):
         cobrems_filename = os.path.basename(cobrems_source_path)
-        # Copy to generators/CobremsDistributions/ directory (shared across generators)
-        os.makedirs(cobrems_directory, exist_ok=True)
-        cobrems_dest_path = os.path.join(cobrems_directory, cobrems_filename)
+        # Copy to template_RBHG/CobremsDistributions/ directory
+        cobrems_dest_dir = os.path.join(template_directory, "CobremsDistributions")
+        os.makedirs(cobrems_dest_dir, exist_ok=True)
+        cobrems_dest_path = os.path.join(cobrems_dest_dir, cobrems_filename)
         subprocess.run(["cp", cobrems_source_path, cobrems_dest_path])
-        # Pass just the filename - Fortran will build full path using RBHGHOMEDIRECTORY
+        # Pass just the filename - Fortran will prepend templateDir/CobremsDistributions/
         cobrems_override = cobrems_filename
         print(f"Copied cobrems file to: {cobrems_dest_path}")
     elif cobrems_source_path:
@@ -1532,14 +1571,21 @@ def run_job_locally_with_args(ENVFILE, leptonexe, directories, job_i, seed, neve
     target = exp_2_target[experiment]
     particle = lepton_2_finalstate[lepton]
     
+    # Ensure vectorspath directory exists
+    os.makedirs(directories['vectorspath'], exist_ok=True)
+    
     print(f"Running: {leptonexe} {seed} {job_i} {nevents}")
     
     # Run Fortran executable directly
     fortran_command = [leptonexe, str(seed), str(job_i), str(nevents)]
-    fortran_result = subprocess.run(fortran_command, capture_output=False, cwd=directories['vectorspath'])
+    fortran_result = subprocess.run(fortran_command, capture_output=True, text=True, cwd=directories['vectorspath'])
     
     if fortran_result.returncode != 0:
         print(f"ERROR: Fortran executable failed with exit code {fortran_result.returncode}")
+        if fortran_result.stdout:
+            print(f"STDOUT:\n{fortran_result.stdout}")
+        if fortran_result.stderr:
+            print(f"STDERR:\n{fortran_result.stderr}")
         print(f"  ✗ Job {job_i} failed with return code {fortran_result.returncode}")
         return fortran_result.returncode
     
@@ -1795,7 +1841,7 @@ for dataset in ffs_datasets:
             hddm_run_number = get_run_number(Experiment, run_period, PolDeg, default_periods=DEFAULTS)
             
             # Create all relevant directories 
-            alldirs, updatedlogicals = make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logicals, run_period, polarization)
+            alldirs, updatedlogicals = make_all_gen_directories(FrameworkHomeDirectory, gen_dir_name, CUEusername, logicals, run_period, polarization)
 
             # Create and save JSON configuration
             histogram_settings = {
@@ -1900,12 +1946,18 @@ for dataset in ffs_datasets:
             
             length_sorted_logicals = sorted(updatedlogicals.items(), key=lambda x: len(x[0]), reverse=True)
             
+            # Debug: print COBREMS-related replacements to verify order
+            print("COBREMS-related sed replacements (sorted by length):")
+            for placeholder, replacement in length_sorted_logicals:
+                if 'COBREMS' in placeholder:
+                    print(f"  {placeholder} ({len(placeholder)} chars) -> {replacement}")
+            
             for placeholder, replacement in length_sorted_logicals:
                 command = ['sed', '-i', f's|{placeholder}|{replacement}|g', FortranFile]
                 subprocess.run(command)
             
             # Compile the single executable
-            fortranexe = os.path.join(alldirs['submit_directory'], fortran_basename(temp_fortran_file) + ".exe")
+            fortranexe = os.path.abspath(os.path.join(alldirs['submit_directory'], fortran_basename(temp_fortran_file) + ".exe"))
             command = ['gfortran', '-std=legacy', '-ffixed-line-length-none', '-fd-lines-as-code', FortranFile, '-o', fortranexe]
             compile_result = subprocess.run(command, capture_output=True, text=True)
             
@@ -1940,7 +1992,7 @@ for dataset in ffs_datasets:
 
 
 # Create Level 2 master configurations (run period coordination) if needed
-outputDirectoryTop = os.path.join(RBHGHomeDirectory, "output/RBHG")
+outputDirectoryTop = os.path.join(FrameworkHomeDirectory, "output", GENERATOR_TYPE)
 run_period_master_files = []
 
 if needs_run_period_master and run_period_master_configs:
