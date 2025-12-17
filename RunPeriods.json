@@ -1,0 +1,169 @@
+{
+  "default": {
+    "description": "Default/most recent software versions",
+    "recon_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
+    "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
+    "background_version": "NONE",
+    "batch_system": "swif2",
+    "jana_epem_config": "standard.config",
+    "jana_mupmum_config": "standard.config",
+    "jana_epimu_config": "standard.config"
+  },
+  "2017": {
+    "description": "2017 data",
+    "experiment": "GlueX-I",
+    "run_range": "30000 - 32759",
+    "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2017_01-ver03.xml",
+    "analysis_env": "/group/halld/www/halldweb/html/halld_versions/analysis-2017_01-ver06.xml",
+    "background_version": "recon-2017_01-ver03",
+    "batch_system": "swif2",
+    "jana_epem_config": "jana_2017_epemissp.config",
+    "jana_epem_ml_skim_config": "jana_2017_epem_ml_skim.config",
+    "Polarizations": {
+      "0DEG": {
+        "characteristic_run": 30327,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_30327_0deg_rcdb.dat",
+        "epem_event_count": "3000000"
+      },
+      "90DEG": {
+        "characteristic_run": 30891,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_30891_90deg_rcdb.dat",
+        "epem_event_count": "3000000"
+      },
+      "135DEG": {
+        "characteristic_run": 30480,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_30480_135deg_rcdb.dat",
+        "epem_event_count": "3000000"
+      },
+      "45DEG": {
+        "characteristic_run": 30484,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_30484_45deg_rcdb.dat",
+        "epem_event_count": "3000000"
+      },
+      "AMO": {
+        "characteristic_run": 30888,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_30888_AMO_rcdb.dat",
+        "epem_event_count": "3000000"
+      }
+    }
+  },
+  "1801": {
+    "description": "Spring 2018 data",
+    "summary": "https://halldweb.jlab.org/wiki-private/index.php/GlueX_Phase-I_Dataset_Summary",
+    "experiment": "GlueX-I",
+    "run_range": "40856 - 42559",
+    "official_run_range": "40856 - 42550",
+    "TPOL_run_range": "41000 - 42559",
+    "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2018_01-ver02_32.xml",
+    "analysis_env": "/group/halld/www/halldweb/html/halld_versions/analysis-2018_01-ver18.xml",
+    "background_version": "Random:recon-2018_01-ver02.2",
+    "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg})",
+    "batch_system": "swif2cont",
+    "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
+    "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
+    "Polarizations": {
+      "0DEG": {
+        "characteristic_run": 42559,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_42559_0deg_rcdb.dat",
+        "total_triggers": "33800000000",
+        "epem_event_count": "6650000"
+      },
+      "90DEG": {
+        "characteristic_run": 41541,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_41541_90deg_rcdb.dat",
+        "total_triggers": "34500000000",
+        "epem_event_count": "6750000"
+      },
+      "135DEG": {
+        "characteristic_run": 41172,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_41172_135deg_rcdb.dat",
+        "total_triggers": "33300000000",
+        "epem_event_count": "6550000"
+      },
+      "45DEG": {
+        "characteristic_run": 41425,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_41425_45deg_rcdb.dat",
+        "total_triggers": "32000000000",
+        "epem_event_count": "6250000"
+      },
+      "AMO": {
+        "characteristic_run": 42554,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_42554_AMO_rcdb.dat",
+        "total_triggers": "12400000000",
+        "epem_event_count": "2450000"
+      }
+    }
+  },
+  "1808": {
+    "description": "Fall 2018 data set",
+    "experiment": "GlueX-I",
+    "run_range": "50685 - 51768",
+    "official_run_range": "50685 - 51735",
+    "low_energy_run_range": "51384 - 51457",
+    "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2018_08-ver02_31.xml",
+    "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version_4.20.0.xml",
+    "background_version": "Random:recon-2018_08-ver02.2",
+    "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg}) and beam_on_current>49",
+    "batch_system": "swif2cont",
+    "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
+    "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
+    "Polarizations": {
+      "0DEG": {
+        "characteristic_run": 51038,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_51038_0deg_rcdb.dat",
+        "total_triggers": "18760000000",
+        "epem_event_count": "3700000"
+      },
+      "90DEG": {
+        "characteristic_run": 50699,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_50699_90deg_rcdb.dat",
+        "total_triggers": "18070000000",
+        "epem_event_count": "3550000"
+      },
+      "135DEG": {
+        "characteristic_run": 51233,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_51233_135deg_rcdb.dat",
+        "total_triggers": "16900000000",
+        "epem_event_count": "3300000"
+      },
+      "45DEG": {
+        "characteristic_run": 51056,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_51056_45deg_rcdb.dat",
+        "total_triggers": "16860000000",
+        "epem_event_count": "3300000"
+      },
+      "AMO": {
+        "characteristic_run": 51029,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_51029_AMO_rcdb.dat",
+        "total_triggers": "9590000000",
+        "epem_event_count": "1900000"
+      }
+    }
+  },
+  "2205": {
+    "description": "2022 CPP data (runs 110621-112001)",
+    "experiment": "CPP/NPP",
+    "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2022_05-ver03.xml",
+    "analysis_env": "/group/halld/www/halldweb/html/halld_versions/analysis-2022_05-ver02.xml",
+    "background_version": "recon-2022_05-ver03",
+    "batch_system": "swif2",
+    "jana_config": "2205_cpp_epem.config",
+    "Polarizations": {
+      "135DEG": {
+        "characteristic_run": 101582,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_101582_135deg_rcdb.dat",
+        "epem_event_count": "40000000"
+      },
+      "45DEG": {
+        "characteristic_run": 101586,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_101586_45deg_rcdb.dat",
+        "epem_event_count": "40000000"
+      },
+      "AMO": {
+        "characteristic_run": 101615,
+        "cobrems_distribution": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_RBHG/CobremsDistributions/cbrem_101615_AMO_rcdb.dat",
+        "epem_event_count": "40000000"
+      }
+    }
+  }
+}
