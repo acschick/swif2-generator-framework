@@ -130,6 +130,57 @@ def save_framework_settings(username, framework_home, shell_type):
     return settings_path
 
 
+def update_runperiods_cobrems(framework_home):
+    """
+    Update RunPeriods.json to point cobrems_distribution entries to
+    framework-local generators/CobremsDistributions/ directory.
+    
+    Converts absolute paths like:
+      /work/.../CobremsDistributions/cbrem_30327_0deg_rcdb.dat
+    To:
+      <framework_home>/generators/CobremsDistributions/cbrem_30327_0deg_rcdb.dat
+    """
+    runperiods_path = os.path.join(framework_home, 'RunPeriods.json')
+    
+    if not os.path.exists(runperiods_path):
+        print(f"  WARNING: RunPeriods.json not found at {runperiods_path}")
+        return
+    
+    # Read current RunPeriods.json
+    with open(runperiods_path, 'r') as f:
+        runperiods = json.load(f)
+    
+    updated_count = 0
+    cobrems_dir = os.path.join(framework_home, 'generators', 'CobremsDistributions')
+    
+    # Iterate through all run periods and polarizations
+    for period_key, period_data in runperiods.items():
+        if not isinstance(period_data, dict):
+            continue
+        
+        polarizations = period_data.get('Polarizations', {})
+        for pol_key, pol_data in polarizations.items():
+            if 'cobrems_distribution' in pol_data:
+                old_path = pol_data['cobrems_distribution']
+                
+                # Extract just the filename from the old path
+                filename = os.path.basename(old_path)
+                
+                # Construct new framework-local path
+                new_path = os.path.join(cobrems_dir, filename)
+                
+                # Update the entry
+                pol_data['cobrems_distribution'] = new_path
+                updated_count += 1
+    
+    # Write updated RunPeriods.json
+    with open(runperiods_path, 'w') as f:
+        json.dump(runperiods, f, indent=2)
+    
+    print(f"  ✓ Updated {updated_count} cobrems_distribution paths in RunPeriods.json")
+    print(f"    New path format: {cobrems_dir}/<filename>")
+
+
 def main():
     print("="*70)
     print("SWIF2 Generator Framework - One-Time Setup")
@@ -146,6 +197,11 @@ def main():
     print("[2/4] Detecting framework installation directory...")
     framework_home = detect_framework_home()
     print(f"  ✓ Framework home: {framework_home}")
+    print()
+    
+    # Update RunPeriods.json cobrems paths
+    print("Updating RunPeriods.json cobrems distribution paths...")
+    update_runperiods_cobrems(framework_home)
     print()
     
     # Step 3: Detect shell type
