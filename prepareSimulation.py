@@ -11,6 +11,11 @@ import sys
 import json
 import argparse
 from pathlib import Path
+import math
+# Add framework directories to Python path for imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)  # For swif2_common.py
+sys.path.insert(0, os.path.join(script_dir, 'hddm_scripts'))  # For hddm_event_utils.py
 
 # Import our utility modules
 try:
@@ -404,6 +409,21 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         # Get settings from JSON or use defaults
         env_xml = mcw_settings.get('recon_env', '/group/halld/www/halldweb/html/halld_versions/version.xml')
         ana_env_xml = mcw_settings.get('analysis_env', '')
+        # Fallback: if environment XML not provided, use RunPeriods.json entry
+        if not env_xml:
+            try:
+                framework_home = extract_config_value(config_data,
+                    ['rbhg_config.directory_paths.base_paths.framework_home', 'framework_home'], os.path.dirname(__file__))
+                runperiods_path = os.path.join(framework_home, 'RunPeriods.json')
+                with open(runperiods_path, 'r') as rp_f:
+                    rp_data = json.load(rp_f)
+                rp_entry = rp_data.get(str(run_period)) or rp_data.get('default') or {}
+                env_xml = rp_entry.get('recon_env', env_xml)
+                ana_env_xml = rp_entry.get('analysis_env', ana_env_xml)
+                if env_xml:
+                    print(f"    Fallback: using recon_env from RunPeriods.json: {env_xml}")
+            except Exception as e:
+                print(f"    WARNING: Could not read recon_env from RunPeriods.json: {e}")
         bkg = mcw_settings.get('background_version', 'NONE')
         rcdb_query = mcw_settings.get('rcdb_query', '')
         
@@ -470,6 +490,48 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         events_per_file = mcw_settings.get('events_per_file', default_per_file)
         
         jana_config = mcw_settings.get('jana_config', '')
+        # Fallback: if jana_config not provided in mcwrapper_settings, try to
+        # auto-select from RunPeriods.json using run_period, polarization, and particle_type
+        if not jana_config:
+            try:
+                framework_home = extract_config_value(config_data,
+                    ['rbhg_config.directory_paths.base_paths.framework_home', 'framework_home'], os.path.dirname(__file__))
+                runperiods_path = os.path.join(framework_home, 'RunPeriods.json')
+                with open(runperiods_path, 'r') as rp_f:
+                    rp_data = json.load(rp_f)
+
+                rp_entry = rp_data.get(str(run_period)) or rp_data.get('default') or {}
+
+                # Build prioritized candidate keys based on particle type
+                p = (particle_type or '').lower()
+                candidates = []
+                if p in ['ee', 'epem', 'epemissp', 'epimu', 'epimu', 'ep'] or 'ep' in p:
+                    candidates = ['jana_epem_ReaFil_config', 'jana_epem_ml_skim_config', 'jana_epem_config']
+                elif p in ['mupmum', 'mumu', 'mu'] or 'mu' in p:
+                    candidates = ['jana_mupmum_ReaFil_config', 'jana_mupmum_config']
+                else:
+                    candidates = ['jana_epem_config', 'jana_mupmum_config', 'jana_epimu_config']
+
+                for key in candidates:
+                    val = rp_entry.get(key, '') or rp_entry.get(key.replace('_ReaFil', ''), '')
+                    if val:
+                        jana_config = val
+                        print(f"    Fallback: selected JANA config from RunPeriods.json key '{key}': {jana_config}")
+                        break
+
+                # If selected jana_config is relative (e.g., 'standard.config'), try to resolve
+                if jana_config and not os.path.isabs(jana_config):
+                    # Look in the mcwrapper template jana_configs directory if available
+                    try:
+                        possible = os.path.join(template_dir, 'jana_configs', jana_config)
+                        if os.path.exists(possible):
+                            jana_config = possible
+                            print(f"    Resolved relative jana_config to: {jana_config}")
+                    except Exception:
+                        pass
+
+            except Exception as e:
+                print(f"    WARNING: Could not determine jana_config from RunPeriods.json: {e}")
         
         # Get the generation workflow name and directory structure to maintain consistency
         # The directory name from generation looks like: 1801_0DEG_DBLRAD_GlueX_ee_Berlin_v113
@@ -511,9 +573,9 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         
         # Get HDDM file size for disk request
         hddm_size_bytes = os.path.getsize(merged_hddm_file)
-        hddm_size_gb = int((hddm_size_bytes / (1024**3)) * 2)  # 2x the HDDM size for working space
-        # Ensure minimum of 28GB for large files
-        disk_request_gb = max(hddm_size_gb, 28)
+        # Multiply by 2.2 and round up to nearest GB
+        hddm_size_gb = math.ceil((hddm_size_bytes / (1024**3)) * 2.2)
+        disk_request_gb = hddm_size_gb
         disk_request = f"{disk_request_gb}GB"
         
         print(f"    Creating MCWrapper config for {run_period} {polarization} {particle_type}")
