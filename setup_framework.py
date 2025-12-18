@@ -94,13 +94,8 @@ def update_config_file(config_path, username, framework_home):
             
             # Update FRAMEWORK_HOME (leave it blank but add comment showing auto-detected value)
             elif key == 'FRAMEWORK_HOME':
-                # Keep it blank (auto-detects), but update any comment
-                comment = ''
-                if '#' in line:
-                    # Preserve existing comment structure
-                    updated_lines.append(line)
-                else:
-                    updated_lines.append(f"FRAMEWORK_HOME               # Auto-detected: {framework_home}\n")
+                # Keep it blank (auto-detects), but update comment to show auto-detected path
+                updated_lines.append(f"FRAMEWORK_HOME               # Auto-detected: {framework_home}\n")
             
             else:
                 # Keep line as-is
