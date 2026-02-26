@@ -151,6 +151,7 @@ coherentPeakStudy = get_config("COHERENT_PEAK_STUDY", False)                # Se
 # Event count matching
 FIXED_EVENT_COUNT = get_config("FIXED_EVENT_COUNT", True)                # Override automatic event counts to use specific fixed values
 TENX_FLAG = get_config("TENX_FLAG", False)                       # 10x the statistics of real data
+SKIP_EXISTING_OUTPUTS = get_config("SKIP_EXISTING_OUTPUTS", True)       # Skip dataset/polarization combinations that already have output
 RUN_PERIOD = str(get_config("RUN_PERIOD", ""))                     # valid: 1801, 1808, FULL2018, 2205, or ""
                                         # Comment out RUN_PERIOD line in config for empty preset
                                         # Add '_AMO' suffix to any preset to include AMO data
@@ -194,7 +195,30 @@ else:
 # Event count configuration
 if FIXED_EVENT_COUNT:
     # Fixed event count mode: use these values regardless of RUN_PERIOD
-    nevents_total = str(get_config("NEVENTS_TOTAL", 10000))
+    config_nevents = get_config("NEVENTS_TOTAL", 10000)
+    
+    # Check for invalid combination: FIXED_EVENT_COUNT=True with "usePreset" value
+    if isinstance(config_nevents, str) and config_nevents.upper() in ["USEPRESET", "USE_PRESET", "PRESET", "AUTO"]:
+        print("\n" + "="*80)
+        print("ERROR: Invalid configuration")
+        print("="*80)
+        print("You cannot use FIXED_EVENT_COUNT = True and NEVENTS_TOTAL = 'usePreset' together.\n")
+        print("These settings are mutually exclusive:\n")
+        print("  • FIXED_EVENT_COUNT = True")
+        print("    Uses the same NEVENTS_TOTAL value for ALL run periods and polarizations.")
+        print("    You must specify an actual number (e.g., NEVENTS_TOTAL = 10000).\n")
+        print("  • NEVENTS_TOTAL = 'usePreset' (or 'auto', 'preset', etc.)")
+        print("    Loads event counts from RunPeriods.json for each run period/polarization.")
+        print("    This only works when FIXED_EVENT_COUNT = False.\n")
+        print("To fix this, choose ONE of these options:\n")
+        print("  1. Keep FIXED_EVENT_COUNT = True, and set NEVENTS_TOTAL to a number")
+        print("     Example: NEVENTS_TOTAL = 10000\n")
+        print("  2. Set FIXED_EVENT_COUNT = False to use RunPeriods.json event counts")
+        print("     (You can leave NEVENTS_TOTAL = 'usePreset' as-is)\n")
+        print("="*80)
+        sys.exit(1)
+    
+    nevents_total = str(config_nevents)
     nevents_perfile = str(get_config("NEVENTS_PERFILE", 5000))
 else:
     # Auto event count mode: load from RunPeriods.json (requires RUN_PERIOD to be set)
@@ -210,7 +234,10 @@ else:
     nevents_perfile = str(get_config("NEVENTS_PERFILE", 5000))
 
 
-
+# Default vertex
+vertex = "0 0 0 0"
+if Experiment.upper() == "CPP":
+    vertex = "0 0 1 1.02806"
     
 ####################################
 ######## Generator Control #########
@@ -367,8 +394,7 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
     # Load RunPeriods.json data for MCWrapper settings if run_period and polarization available
     mcwrapper_settings = {}
     if run_period and polarization and directories:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        rp_data = load_runperiods_data(run_period, polarization, script_dir)
+        rp_data = load_runperiods_data(run_period, polarization, FrameworkHomeDirectory)
         
         if rp_data:
             # Use explicit overrides from RBHG.config if set, otherwise use RunPeriods.json defaults
@@ -878,16 +904,13 @@ nevents = {
 if not FIXED_EVENT_COUNT and RUN_PERIOD:
     print("FIXED_EVENT_COUNT is False - loading event counts from RunPeriods.json...")
     try:
-        # Get RBHG home directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        
         # Load event counts for each run period and polarization
         for run_period_key in list(nevents.keys()):
             for pol_key in list(nevents[run_period_key].keys()):
                 # Create full run_period string with potential suffixes
                 full_run_period = RUN_PERIOD if RUN_PERIOD else run_period_key
                 
-                rp_data = load_runperiods_data(run_period_key, pol_key, script_dir)
+                rp_data = load_runperiods_data(run_period_key, pol_key, FrameworkHomeDirectory)
                 if rp_data and rp_data.get("epem_event_count"):
                     event_count = rp_data["epem_event_count"]
                     # Convert to int (might be string in JSON)
@@ -1408,6 +1431,14 @@ def capture_swif_stdout(command):
         return None
 
 def parse_workflow_names(swif_output):
+    # Handle None or empty output (e.g., when swif2 server has errors)
+    if swif_output is None:
+        print("Warning: swif2 list returned None (server may be experiencing issues)")
+        return []
+    
+    if not swif_output.strip():
+        return []
+    
     # Split the output into lines
     lines = swif_output.strip().split('\n')
     # Skip the header line and possibly the footer or empty lines
@@ -1424,19 +1455,194 @@ def parse_workflow_names(swif_output):
 
 def workflow_exists(workflow_name):
     swif2_list_output = capture_swif_stdout(['swif2', 'list'])
+    if swif2_list_output is None:
+        # If swif2 server has errors, assume workflow doesn't exist and let swif2 create handle it
+        print(f"Warning: Could not check existing workflows (swif2 server error). Proceeding with workflow creation...")
+        return False
     workflows = parse_workflow_names(swif2_list_output)
     return workflow_name in workflows
 
 def create_swif2_workflow(workflow_name):
     original_name = workflow_name
     n = 1
-    while workflow_exists(workflow_name):
+    max_attempts = 10  # Prevent infinite loop if swif2 keeps failing
+    
+    while workflow_exists(workflow_name) and n < max_attempts:
         workflow_name = f"{original_name}_{n}"
         n += 1
     
-    subprocess.run(["swif2", "create", "-workflow", workflow_name])
-    #print(f"Workflow created with name: {workflow_name}")
+    if n >= max_attempts:
+        print(f"Warning: Reached maximum attempts checking workflow name uniqueness. Using: {workflow_name}")
+    
+    result = subprocess.run(["swif2", "create", "-workflow", workflow_name], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f"Warning: swif2 create may have failed: {result.stderr}")
+        print(f"Continuing with workflow name: {workflow_name}")
+    
     return workflow_name
+
+def check_output_exists(base_output_dir, study_name, nametag, form_factor, run_period, polarization):
+    """
+    Check if output already exists for a given dataset/polarization combination.
+    
+    Returns:
+        tuple: (exists: bool, config_path: str, reason: str)
+            exists: True if output appears complete (setup + jobs submitted)
+            config_path: Path to the config file if it exists
+            reason: Human-readable explanation
+    """
+    import json
+    
+    # Build expected directory structure
+    dataset_key = f"{nametag}_{form_factor}"
+    
+    # Try to determine the generation directory name pattern
+    # This is a simplified check - just look for the dataset/polarization subdirectory
+    dataset_dir = os.path.join(base_output_dir, study_name, dataset_key)
+    
+    if not os.path.exists(dataset_dir):
+        return False, None, f"Dataset directory does not exist: {dataset_dir}"
+    
+    # Look for any subdirectory matching the run_period and polarization
+    # Pattern: {run_period}_{polarization}_*
+    if run_period:
+        pattern = f"{run_period}_{polarization}"
+    else:
+        pattern = polarization
+    
+    matching_dirs = []
+    try:
+        for item in os.listdir(dataset_dir):
+            item_path = os.path.join(dataset_dir, item)
+            if os.path.isdir(item_path) and pattern in item:
+                matching_dirs.append(item_path)
+    except Exception as e:
+        return False, None, f"Error scanning dataset directory: {e}"
+    
+    if not matching_dirs:
+        return False, None, f"No output directory found for {pattern}"
+    
+    # Check if any matching directory has a config file AND jobs were submitted
+    for output_dir in matching_dirs:
+        config_file = os.path.join(output_dir, "rbhg_config.json")
+        if os.path.exists(config_file):
+            # Check if jobs were actually submitted
+            try:
+                with open(config_file, 'r') as f:
+                    config_data = json.load(f)
+                    jobs_submitted = config_data.get('submission_status', {}).get('jobs_submitted', False)
+                    
+                    if jobs_submitted:
+                        workflow_name = config_data.get('submission_status', {}).get('workflow_name', 'unknown')
+                        return True, config_file, f"Jobs submitted to workflow '{workflow_name}'"
+                    else:
+                        return False, None, f"Config exists but jobs were not submitted (incomplete setup)"
+            except (json.JSONDecodeError, KeyError) as e:
+                # Old config format without submission_status
+                return False, None, f"Config exists but missing submission status (old format or incomplete)"
+    
+    return False, None, f"Output directories exist but missing config files (incomplete setup)"
+
+def mark_jobs_submitted(config_file, workflow_name, total_jobs):
+    """
+    Update config file to mark that all jobs have been successfully submitted.
+    
+    Args:
+        config_file: Path to rbhg_config.json
+        workflow_name: Name of the SWIF2 workflow
+        total_jobs: Number of jobs submitted
+    """
+    import json
+    from datetime import datetime
+    
+    try:
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        
+        # Add submission status
+        config_data['submission_status'] = {
+            'jobs_submitted': True,
+            'workflow_name': workflow_name,
+            'total_jobs': total_jobs,
+            'submission_time': datetime.now().isoformat()
+        }
+        
+        # Write back to file
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"Warning: Could not update submission status in config: {e}")
+        return False
+
+def check_workflow_conflict(workflow_name):
+    """
+    Check if a workflow with this name already exists in SWIF2.
+    
+    Returns:
+        tuple: (exists: bool, should_proceed: bool, new_workflow_name: str or None)
+            exists: True if workflow name already exists
+            should_proceed: True if user wants to proceed (after resolving conflict)
+            new_workflow_name: New workflow name to use (if conflict resolved)
+    """
+    if not workflow_exists(workflow_name):
+        return False, True, workflow_name
+    
+    # Workflow exists - prompt user for action
+    print(f"\n{'!'*60}")
+    print(f"WARNING: Workflow '{workflow_name}' already exists in SWIF2")
+    print(f"{'!'*60}")
+    print(f"\nThis usually means:")
+    print(f"  a) Jobs were already submitted for this dataset/polarization")
+    print(f"  b) A previous run was interrupted and workflow still exists")
+    print(f"  c) You're re-running the same configuration")
+    print(f"\nOptions:")
+    print(f"  1) SKIP this dataset/polarization (recommended if jobs are running)")
+    print(f"  2) Create NEW workflow with different name (appends _1, _2, etc.)")
+    print(f"  3) CANCEL existing workflow and create fresh one (CAUTION: kills running jobs)")
+    print(f"  4) Abort entire script")
+    
+    while True:
+        choice = input(f"\nEnter choice [1-4]: ").strip()
+        
+        if choice == '1':
+            print(f"Skipping this dataset/polarization...")
+            return True, False, None
+        
+        elif choice == '2':
+            # Find next available name
+            original_name = workflow_name
+            n = 1
+            while workflow_exists(workflow_name):
+                workflow_name = f"{original_name}_{n}"
+                n += 1
+                if n > 50:  # Safety limit
+                    print(f"Error: Too many workflows with similar names. Please clean up old workflows.")
+                    return True, False, None
+            
+            print(f"Will create new workflow: {workflow_name}")
+            return True, True, workflow_name
+        
+        elif choice == '3':
+            print(f"Canceling existing workflow '{workflow_name}'...")
+            result = subprocess.run(['swif2', 'cancel', '-workflow', workflow_name], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"Workflow canceled successfully.")
+                return True, True, workflow_name
+            else:
+                print(f"Error canceling workflow: {result.stderr}")
+                print(f"You may need to manually cancel it: swif2 cancel -workflow {workflow_name}")
+                return True, False, None
+        
+        elif choice == '4':
+            print(f"Aborting script...")
+            sys.exit(0)
+        
+        else:
+            print(f"Invalid choice. Please enter 1, 2, 3, or 4.")
 
 def safe_workflow_name(name, maxlen=48):
     """Ensure workflow name does not exceed SWIF2 limits; append short hash if truncated."""
@@ -1507,13 +1713,16 @@ def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, direct
     command_list.append(fortran_command)
     command_list.append(directories['vectorspath']) # cd to vectors path in bash script
     # Build hddm command as single string (SAME format as fortran_command)
+
+    
     hddm_command = (
         f"python {ascii2hddm_script} {particle} {target} "
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.txt')} "
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.hddm')} "
         f"--run {hddm_run_number} "
-        f"--vertex '0 0 0 0'"
+        f"--vertex '{vertex}'"
     )
+    
     command_list.append(hddm_command)
     # Execute the command
     subprocess.run(command_list)
@@ -1549,7 +1758,7 @@ def run_job_locally_with_args(ENVFILE, leptonexe, directories, job_i, seed, neve
         os.path.join(directories['vectorspath'], f'vectors_{job_i}.txt'),
         os.path.join(directories['vectorspath'], f'vectors_{job_i}.hddm'),
         '--run', str(hddm_run_number),
-        '--vertex', '0', '0', '0', '0'
+        '--vertex', *vertex.split()
     ]
     hddm_result = subprocess.run(hddm_command, capture_output=False)
     
@@ -1606,7 +1815,7 @@ def swif2_add_job(stub_dict, workflow_name, ENVFILE, leptonexe, directories, job
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.txt')} "
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.hddm')} "
         f"--run {hddm_run_number} "
-        f"--vertex '0 0 0 0'"
+        f"--vertex '{vertex}'"
     )
     command_list.append(hddm_command)
     # Execute the command
@@ -1635,7 +1844,7 @@ def run_job_locally(ENVFILE, leptonexe, directories, job_i, lepton, experiment, 
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.txt')} "
         f"{os.path.join(directories['vectorspath'], f'vectors_{job_i}.hddm')} "
         f"--run {hddm_run_number} "
-        f"--vertex '0 0 0 0'"
+        f"--vertex '{vertex}'"
     )
     
     # Path to the bash script
@@ -1655,7 +1864,7 @@ def run_job_locally(ENVFILE, leptonexe, directories, job_i, lepton, experiment, 
         os.path.join(directories['vectorspath'], f'vectors_{job_i}.txt'),
         os.path.join(directories['vectorspath'], f'vectors_{job_i}.hddm'),
         '--run', str(hddm_run_number),
-        '--vertex', '0 0 0 0'
+        '--vertex', '{vertex}'
     ]
     
     result = subprocess.run(command, capture_output=False)
@@ -1736,6 +1945,23 @@ for dataset in ffs_datasets:
     for run_period, polarizations in actual_run_configs.items():
         for polarization, events in polarizations.items():
             print(f"Run Period: {run_period}, Polarization: {polarization}, Events: {events}")
+            
+            # Check if output already exists (resumption logic)
+            if SKIP_EXISTING_OUTPUTS:
+                exists, config_path, reason = check_output_exists(
+                    RBHGHomeDirectory + "/output/RBHG",
+                    study_name, current_nametag, current_form_factor, 
+                    run_period, polarization
+                )
+                if exists:
+                    print(f"\n{'='*60}")
+                    print(f">> SKIPPING: {current_nametag}_{current_form_factor} / {run_period}_{polarization}")
+                    print(f"   Reason: {reason}")
+                    print(f"   Config: {config_path}")
+                    print(f"   (Set SKIP_EXISTING_OUTPUTS = False to regenerate)")
+                    print(f"{'='*60}\n")
+                    continue
+            
             if RUN_PERIOD: 
                 PolDeg = polarization.replace("DEG", "")
                 print(polarization)
@@ -1794,7 +2020,22 @@ for dataset in ffs_datasets:
             DEFAULTS = {"CPP": "2022-05", "GlueX": "2018-08"}
             hddm_run_number = get_run_number(Experiment, run_period, PolDeg, default_periods=DEFAULTS)
             
-            # Create all relevant directories 
+            # Generate workflow name and check for conflicts BEFORE creating directories
+            workflow_name_base = make_workflow_name(study_name, current_nametag, current_form_factor, run_period, polarization, lepton, internal_radiation, single_radiation, hypgeom_radiation)
+            workflow_name = f"gen_{workflow_name_base}"  # Add generation prefix
+            
+            if not INTERACTIVE_MODE:
+                # Check for workflow conflicts before creating directories
+                conflict_exists, should_proceed, resolved_name = check_workflow_conflict(workflow_name)
+                
+                if not should_proceed:
+                    print(f"Skipping this dataset/polarization due to workflow conflict.")
+                    continue  # Skip to next iteration WITHOUT creating directories
+                
+                # Use resolved workflow name (might be original, or _1, _2, etc.)
+                workflow_name = resolved_name if resolved_name else workflow_name
+            
+            # NOW create all relevant directories (only if we're proceeding)
             alldirs, updatedlogicals = make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logicals, run_period, polarization)
 
             # Create and save JSON configuration
@@ -1839,11 +2080,14 @@ for dataset in ffs_datasets:
             if is_ffs:
                 ffs_dataset_configs[current_nametag] = config
 
-            workflow_name_base = make_workflow_name(study_name, current_nametag, current_form_factor, run_period, polarization, lepton, internal_radiation, single_radiation, hypgeom_radiation)
-            workflow_name = f"gen_{workflow_name_base}"  # Add generation prefix
-            
+            # Create SWIF2 workflow if not in interactive mode (name already determined and conflict-checked)
             if not INTERACTIVE_MODE:
-                workflow_name = create_swif2_workflow(workflow_name)  # Capture the actual workflow name used
+                # Create workflow (conflict already checked earlier, name already resolved)
+                result = subprocess.run(["swif2", "create", "-workflow", workflow_name], 
+                                      capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(f"Warning: swif2 create failed: {result.stderr}")
+                    print(f"Continuing with workflow name: {workflow_name}")
 
             # Generate job-specific parameters FIRST (we need them for compilation defaults and JSON)
             print(f"\n{'='*60}")
@@ -1937,6 +2181,10 @@ for dataset in ffs_datasets:
                                            ascii2hddm_script, hddm_run_number)
                 
                 print(f"\nAll {total_jobs} jobs submitted to workflow '{workflow_name}'!")
+                
+                # Mark config as jobs_submitted = True
+                mark_jobs_submitted(config_file, workflow_name, total_jobs)
+                print(f"Config updated with submission status.")
 
 
 # Create Level 2 master configurations (run period coordination) if needed

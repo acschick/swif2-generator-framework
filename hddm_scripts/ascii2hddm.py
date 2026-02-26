@@ -122,7 +122,7 @@ def get_particle_info(particle_name):
 
 
 def ascii2hddm(final_state_string, target_type, input_file, output_file, 
-               runNumber=0, vertex=None):
+               runNumber=0, vertex=None, use_doubles=True):
     """
     Convert ASCII generator output to HDDM format with arbitrary final state
     
@@ -133,6 +133,7 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         output_file: Output HDDM file path
         runNumber: Run number to embed in HDDM
         vertex: Vertex string 'vx vy zmin zmax'
+        use_doubles: Add momentum_double for all particles (default: True)
     """
     
     # Parse final state
@@ -229,10 +230,19 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         bea = rea[0].addBeams()
         bea[0].type = get_particle_info('photon')['geant_pid']
         bmom = bea[0].addMomenta()
-        bmom[0].E = E_beam
+        bmom[0].E = float(np.float32(E_beam))
         bmom[0].px = 0
         bmom[0].py = 0
-        bmom[0].pz = E_beam
+        bmom[0].pz = float(np.float32(E_beam))
+        
+        # Add double precision momentum for beam (default behavior)
+        if use_doubles:
+            bmom_double = bmom[0].addMomentum_doubles()
+            bmom_double[0].E = E_beam
+            bmom_double[0].px = 0.0
+            bmom_double[0].py = 0.0
+            bmom_double[0].pz = E_beam
+        
         bpro = bea[0].addPropertiesList()
         bpro[0].charge = 0
         bpro[0].mass = 0
@@ -266,7 +276,7 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         prod = vtx[0].addProducts(n_particles + 1)
 
         # Add all particles in order
-        for i, (info, (E, px, py, pz)) in enumerate(zip(particle_infos, particle_4momenta)):
+        for i, (info, (E_particle, px_particle, py_particle, pz_particle)) in enumerate(zip(particle_infos, particle_4momenta)):
             prod[i].id = i + 1
             prod[i].pdgtype = info['pdg_type']
             prod[i].type = info['geant_pid']
@@ -278,10 +288,18 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
             # PASS THROUGH values directly from generator
             # The generator has already enforced energy conservation in float32
             # DO NOT recalculate E - that would break energy conservation!
-            mom[0].E = float(np.float32(E))
-            mom[0].px = float(np.float32(px))
-            mom[0].py = float(np.float32(py))
-            mom[0].pz = float(np.float32(pz))
+            mom[0].E = float(np.float32(E_particle))
+            mom[0].px = float(np.float32(px_particle))
+            mom[0].py = float(np.float32(py_particle))
+            mom[0].pz = float(np.float32(pz_particle))
+            
+            # Add double precision momentum for ALL particles (default behavior)
+            if use_doubles:
+                mom_double = mom[0].addMomentum_doubles()
+                mom_double[0].E = E_particle
+                mom_double[0].px = px_particle
+                mom_double[0].py = py_particle
+                mom_double[0].pz = pz_particle
             
             # Add properties with correct mass
             props = prod[i].addPropertiesList()
@@ -306,6 +324,14 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         mom_recoil[0].py = float(np.float32(py_recoil))
         mom_recoil[0].pz = float(np.float32(pz_recoil))
         
+        # Add double precision momentum for recoil (default behavior)
+        if use_doubles:
+            mom_recoil_double = mom_recoil[0].addMomentum_doubles()
+            mom_recoil_double[0].E = E_recoil
+            mom_recoil_double[0].px = px_recoil
+            mom_recoil_double[0].py = py_recoil
+            mom_recoil_double[0].pz = pz_recoil
+        
         # Add properties with correct mass for recoil
         props_recoil = prod[recoil_idx].addPropertiesList()
         props_recoil[0].charge = target_info['charge']
@@ -320,6 +346,10 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
     if skipped_lines > 0:
         print(f"  Lines skipped: {skipped_lines}")
     print(f"  Output file: {output_file}")
+    if use_doubles:
+        print(f"  Precision: Double precision (momentum_double added)")
+    else:
+        print(f"  Precision: Single precision only")
 
 
 if __name__ == "__main__":
@@ -374,6 +404,10 @@ The script automatically determines:
                         help="Vertex position as 'vx vy zmin zmax'. "
                              "Default '0 0 0 0' tells hdgeant4 to use run-specific beam/target geometry. "
                              "Non-zero values specify fixed vertex (vx,vy) and z-range for uniform sampling.")
+    parser.add_argument("--no-doubles", 
+                        action="store_true",
+                        help="Do NOT add momentum_double (use single precision only). "
+                             "Default is to add double precision for all momenta.")
     
     args = parser.parse_args()
 
@@ -382,6 +416,7 @@ The script automatically determines:
         target_type=args.target,
         input_file=args.input_file,
         output_file=args.output_file,
+        use_doubles=not args.no_doubles,
         runNumber=args.run,
         vertex=args.vertex
     )

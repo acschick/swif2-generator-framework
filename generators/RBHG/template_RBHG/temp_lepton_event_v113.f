@@ -77,6 +77,8 @@ c
      &	test,E_rad,ks(3),elasticity,phiR,p1_tran,p2_tran,c1,c2,vec(3),sqrt2,count,delta
 	integer*4 iseed
 	integer*8 i,itest(4),nevent,j,nfail,bad_max,i_array,j_array, ztgt,phase_space
+	integer*8 nfail_bin(5),ibin	! For angle-binned rejection tracking
+	real*8 theta_avg
 	logical hist_w,hist_x,hist_t,hist_phi_JT,hist_Egamma,hist_theta,output_event,hist_t_variable,
      &	nuc_FF,muon,electron,brem_init,cobrems,cobrems_varbin,integral_xsctn,verbose_output,
      &	bakmaev,heitler,berlin,para,radiation,single_radiation,hist_elasticity,hist_mm,
@@ -331,8 +333,26 @@ c       .  Initialize Brem. distribution: select 1/Egamma or coherent Brems. fil
 	endif
 c       
 c       Phase space assignment:
-	phase_space= 8		!theta=xs**phase_space, with integer phase_space >1 . Phase_space=8 is the fastest for e+e- and also mu+mu-
-c       !Set phase_space=0 for standard dcos theta/dx =1
+c       =====================================================================
+c       phase_space controls importance sampling: theta = xs**phase_space
+c       Higher values concentrate sampling at smaller angles where cross section is larger
+c       phase_space=0: uniform in cos(theta) - no importance sampling
+c       phase_space=2: ~75% of samples in lower half of angle range
+c       phase_space=4: ~94% of samples in lower half of angle range 
+c       phase_space=8: ~99.6% of samples in lower half of angle range
+c       phase_space=16: ~99.998% of samples in lower half of angle range
+c       RECOMMENDED: phase_space=8-16 for proton (slowly-varying form factor)
+c                    phase_space=16-20 for Pb-208 (rapidly-varying form factor)
+c       NOTE: Can be overridden by framework substitution if needed
+c       =====================================================================
+	if (ztgt.eq.1) then
+		phase_space = 16		!proton: form factor varies slowly, 16 helps
+	else if (ztgt.eq.82) then
+		phase_space = 16		!lead: form factor drops rapidly, 16-20 optimal
+	else
+		phase_space = 16		!default for other targets
+	end if
+	print *, 'Using phase_space =', phase_space, ' for ztgt =', ztgt
 	Rexp=real(phase_space)
 c       
 c       
@@ -419,6 +439,7 @@ c
 		if(verbose_output) print *, 'Egamma', Egamma_max, 'x', xmax, 'theta1', theta1_max, 'theta2', theta2_max,
      &		'phi1', phi1_max, 'phi2', phi2_max 
 	end do
+	print *, '*** CROSS_MAX FOUND: ', cross_max, ' at theta1=', theta1_max, ' theta2=', theta2_max
 c
 c**********************************************************************************************************
 c Loop over 4 samplings of the phase space at coherent peak, each a factor of x10 larger, to see if the integrated cross section converges
@@ -472,10 +493,16 @@ c	Use the widest possible range in x by using the maximum accepted tagged photon
 c
 	nfail=0
 	bad_max=0
+	do ibin=1,5
+		nfail_bin(ibin)=0
+	end do
 c
 	print *, 'Starting event generation...'
 	do i=1,nevent
-		if (mod(i,1000) == 0) print *, 'Generated', i, 'of', nevent, 'events'
+		if (mod(i,1000) == 0) then
+			print *, 'Generated', i, 'of', nevent, 'events'
+			print *, '  Rejection rate so far:', real(nfail)/real(nfail+i), ' (', nfail, ' failures)'
+		end if
 100		continue			!try again
 		Egamma=ZBQLUAB(E_lo,E_hi)	!get tagged photon energy
 		x1=ZBQLUAB(x_min,x_max)		!energy fraction	
@@ -511,6 +538,19 @@ c
 		cross_test=cross_max*ZBQLUAB(zlo,zhi)
 		if (cross_test.gt.cross_section) then	!selection fails
 			nfail=nfail+1
+			! Track rejections by average angle
+			theta_avg = (theta1+theta2)/2. * 180./pi
+			if (theta_avg.lt.1.0) then
+				nfail_bin(1) = nfail_bin(1) + 1
+			else if (theta_avg.lt.2.0) then
+				nfail_bin(2) = nfail_bin(2) + 1
+			else if (theta_avg.lt.4.0) then
+				nfail_bin(3) = nfail_bin(3) + 1
+			else if (theta_avg.lt.7.0) then
+				nfail_bin(4) = nfail_bin(4) + 1
+			else
+				nfail_bin(5) = nfail_bin(5) + 1
+			end if
 			go to 100
 		end if
 c
@@ -741,8 +781,25 @@ c
 c   Event generation ends
 c	
 	failure=float(nfail)/float(nevent)
-	if(verbose_output) print *, 'phase space parameter = ', phase_space, 'failures/event = ', 
-     &		failure , ' Events exceeding max xsctn = ', bad_max
+	print *, ''
+	print *, '*** FINAL STATISTICS ***'
+	print *, 'Phase space parameter = ', phase_space
+	print *, 'Failures/event = ', failure, ' (acceptance rate = ', 1.0/(1.0+failure), ')'
+	print *, 'Total failures = ', nfail, ' for ', nevent, ' accepted events'
+	print *, 'Events exceeding max xsctn = ', bad_max
+	print *, 'Target Z = ', ztgt, ' Theta range = ', theta_min*180./pi, ' to ', theta_max*180./pi
+	print *, ''
+	print *, '*** REJECTION BREAKDOWN BY ANGLE BIN ***'
+	print *, 'Bin 1 (0.0-1.0 deg): ', nfail_bin(1), ' rejections'
+	print *, '  Percent of total: ', 100.*real(nfail_bin(1))/real(nfail), '%'
+	print *, 'Bin 2 (1.0-2.0 deg): ', nfail_bin(2), ' rejections'
+	print *, '  Percent of total: ', 100.*real(nfail_bin(2))/real(nfail), '%'
+	print *, 'Bin 3 (2.0-4.0 deg): ', nfail_bin(3), ' rejections'
+	print *, '  Percent of total: ', 100.*real(nfail_bin(3))/real(nfail), '%'
+	print *, 'Bin 4 (4.0-7.0 deg): ', nfail_bin(4), ' rejections'
+	print *, '  Percent of total: ', 100.*real(nfail_bin(4))/real(nfail), '%'
+	print *, 'Bin 5 (7.0+ deg):    ', nfail_bin(5), ' rejections'
+	print *, '  Percent of total: ', 100.*real(nfail_bin(5))/real(nfail), '%'
 c
 c   Write out the histograms 
 c
