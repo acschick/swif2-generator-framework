@@ -1028,8 +1028,10 @@ def prompt_histogram_merging(config_data, config_path):
     print("="*80)
     print("\nRBHG generator produces histogram files in the hists/ directory.")
     print("These can be merged into a single ROOT file for easier analysis.")
-    print("\nHistogram merging script location:")
-    print("  generators/RBHG/histogram_scripts/mergeHists.py")
+    print("\nHistogram merging options:")
+    print("  1. Single directory:  generators/RBHG/histogram_scripts/mergeHists.py")
+    print("  2. All directories:   ./merge_all_histograms.py <path> --interactive")
+    print("  3. Farm submission:   ./merge_all_histograms.py <path> --farm")
     
     response = input("\nWould you like to merge histograms now? (y/n): ").strip().lower()
     
@@ -1080,11 +1082,15 @@ def prompt_histogram_merging(config_data, config_path):
                     print(f"  python generators/RBHG/histogram_scripts/mergeHists.py")
         else:
             print("\nCould not automatically locate hists directory.")
-            print("You can merge histograms manually by editing and running:")
+            print("You can merge histograms using:")
+            print("  ./merge_all_histograms.py output/RBHG/<study>/ --interactive")
+            print("Or manually with:")
             print("  generators/RBHG/histogram_scripts/mergeHists.py")
     else:
         print("\nSkipping histogram merging.")
-        print("To merge histograms later, see: generators/RBHG/histogram_scripts/")
+        print("To merge multiple directories later, use:")
+        print("  ./merge_all_histograms.py output/RBHG/<study>/ --farm")
+        print("For single directory: generators/RBHG/histogram_scripts/")
 
 def main():
     """Main function to handle command line arguments and route processing"""

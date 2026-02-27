@@ -189,15 +189,26 @@ def main():
     print()
     
     # Step 1: Detect username
-    print("[1/4] Detecting username...")
+    print("[1/5] Detecting username...")
     username = detect_username()
     print(f"  ✓ Username: {username}")
     print()
     
     # Step 2: Detect framework home
-    print("[2/4] Detecting framework installation directory...")
+    print("[2/5] Detecting framework installation directory...")
     framework_home = detect_framework_home()
     print(f"  ✓ Framework home: {framework_home}")
+    print()
+    
+    # Step 3: Create output directories
+    print("[3/5] Creating output directories...")
+    output_dirs = [
+        os.path.join(framework_home, 'output', 'RBHG'),
+        os.path.join(framework_home, 'output', 'SPIZG')
+    ]
+    for output_dir in output_dirs:
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"  ✓ {output_dir}")
     print()
     
     # Update RunPeriods.json cobrems paths
@@ -205,14 +216,14 @@ def main():
     update_runperiods_cobrems(framework_home)
     print()
     
-    # Step 3: Detect shell type
-    print("[3/4] Detecting shell type...")
+    # Step 4: Detect shell type
+    print("[4/5] Detecting shell type...")
     shell_type = detect_shell()
     print(f"  ✓ Shell type: {shell_type}")
     print()
     
-    # Step 4: Update config files
-    print("[4/4] Updating configuration files...")
+    # Step 5: Update config files
+    print("[5/5] Updating configuration files...")
     config_dir = os.path.join(framework_home, 'GeneratorConfigExamples')
     config_files = glob.glob(os.path.join(config_dir, '*.config'))
     
