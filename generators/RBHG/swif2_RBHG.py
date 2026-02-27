@@ -233,11 +233,6 @@ else:
         nevents_total = str(config_nevents)
     nevents_perfile = str(get_config("NEVENTS_PERFILE", 5000))
 
-
-# Default vertex
-vertex = "0 0 0 0"
-if Experiment.upper() == "CPP":
-    vertex = "0 0 1 1.02806"
     
 ####################################
 ######## Generator Control #########
@@ -278,6 +273,11 @@ hypgeom_radiation   = get_config("HYPGEOM_RADIATION", False)             # Futur
 # automatically overwritten if RUN_PERIOD != "" 
 PolDeg = str(get_config("POL_DEG", 45))                           # Set photon beam polarization orientation to '0', '90', '135', '45', or 'AMO'
 Experiment = get_config("EXPERIMENT", "GlueX")                      # "GlueX" or "CPP"
+
+# Default vertex (set after Experiment is defined)
+vertex = "0 0 0 0"
+if Experiment.upper() == "CPP":
+    vertex = "0 0 1 1.02806"
 
 #### MCWrapper / Simulation Control ####
 MCWrapper_ReconEnv = get_config("MCWRAPPER_RECON_ENV_OVERRIDE", "")        # Override recon environment (blank = use RunPeriods.json default)

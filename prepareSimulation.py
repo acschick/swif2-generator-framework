@@ -998,6 +998,94 @@ def process_ffs_master(config_data, config_path):
     
     return results
 
+def prompt_histogram_merging(config_data, config_path):
+    """
+    Prompt user to merge RBHG histogram files if applicable
+    
+    Args:
+        config_data (dict): Configuration data
+        config_path (str): Path to configuration file
+    """
+    # Check if this is RBHG-related
+    is_rbhg = ('rbhg_config' in config_data or 
+               any('rbhg' in str(v).lower() for v in str(config_data).lower().split()[:100]))
+    
+    if not is_rbhg:
+        return  # Not RBHG, skip
+    
+    # Check if histograms were actually enabled in the config
+    histograms_enabled = extract_config_value(config_data,
+        ['rbhg_config.output_settings.histograms.invariant_mass',
+         'output_settings.histograms.invariant_mass',
+         'histograms.invariant_mass'], True)  # Default to True if not specified
+    
+    if not histograms_enabled:
+        print("\nNote: Histograms were disabled in generator config, skipping merge prompt.")
+        return
+    
+    print("\n" + "="*80)
+    print("RBHG HISTOGRAM MERGING")
+    print("="*80)
+    print("\nRBHG generator produces histogram files in the hists/ directory.")
+    print("These can be merged into a single ROOT file for easier analysis.")
+    print("\nHistogram merging script location:")
+    print("  generators/RBHG/histogram_scripts/mergeHists.py")
+    
+    response = input("\nWould you like to merge histograms now? (y/n): ").strip().lower()
+    
+    if response == 'y':
+        # Try to find hists directory from config
+        hists_dir = None
+        
+        # Try to extract the base directory from vectors path
+        vectors_dir = extract_config_value(config_data,
+            ['rbhg_config.directory_paths.rbhg_generation.vectors_hddm_directory',
+             'vectors_hddm_directory', 'directory_paths.rbhg_generation.vectors_hddm_directory'])
+        
+        if vectors_dir:
+            # hists/ is typically a sibling to vectors/
+            base_dir = os.path.dirname(vectors_dir)
+            potential_hists_dir = os.path.join(base_dir, 'hists')
+            if os.path.exists(potential_hists_dir):
+                hists_dir = base_dir
+        
+        if hists_dir:
+            print(f"\nFound hists directory at: {hists_dir}/hists/")
+            proceed = input("Proceed with merging? (y/n): ").strip().lower()
+            
+            if proceed == 'y':
+                try:
+                    # Import and run the merge function
+                    merge_script = os.path.join(script_dir, 'generators', 'RBHG', 
+                                               'histogram_scripts', 'mergeHists.py')
+                    
+                    if os.path.exists(merge_script):
+                        # Import the module dynamically
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("mergeHists", merge_script)
+                        merge_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(merge_module)
+                        
+                        print("\nMerging histograms...")
+                        merge_module.merge_histograms(hists_dir, cleanup_mode='move')
+                        print("✓ Histogram merging completed!")
+                        print(f"  Output: {os.path.join(hists_dir, 'hists', 'merged_histograms.root')}")
+                    else:
+                        print(f"ERROR: Could not find merge script at {merge_script}")
+                        print("You can run manually:")
+                        print(f"  python generators/RBHG/histogram_scripts/mergeHists.py")
+                except Exception as e:
+                    print(f"ERROR during histogram merging: {e}")
+                    print("\nYou can merge histograms manually by running:")
+                    print(f"  python generators/RBHG/histogram_scripts/mergeHists.py")
+        else:
+            print("\nCould not automatically locate hists directory.")
+            print("You can merge histograms manually by editing and running:")
+            print("  generators/RBHG/histogram_scripts/mergeHists.py")
+    else:
+        print("\nSkipping histogram merging.")
+        print("To merge histograms later, see: generators/RBHG/histogram_scripts/")
+
 def main():
     """Main function to handle command line arguments and route processing"""
     
@@ -1053,6 +1141,10 @@ Examples:
         # Report final results
         if results['success']:
             print(f"\nSUCCESS: Processing completed for {config_type} configuration")
+            
+            # Offer histogram merging for RBHG configurations
+            prompt_histogram_merging(config_data, args.config)
+            
             return 0
         else:
             print(f"\nFAILED: Processing failed for {config_type} configuration")

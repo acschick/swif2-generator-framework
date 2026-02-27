@@ -92,10 +92,11 @@ def update_config_file(config_path, username, framework_home):
                     comment = '\n'
                 updated_lines.append(f"USERNAME                     {username}{comment}")
             
-            # Update FRAMEWORK_HOME (leave it blank but add comment showing auto-detected value)
+            # Update FRAMEWORK_HOME (leave it blank to enable auto-detection)
             elif key == 'FRAMEWORK_HOME':
-                # Keep it blank (auto-detects), but update comment to show auto-detected path
-                updated_lines.append(f"FRAMEWORK_HOME               # Auto-detected: {framework_home}\n")
+                # Intentionally left blank - enables portable auto-detection
+                # Generators will auto-detect framework root from script location
+                updated_lines.append(f"FRAMEWORK_HOME               # (blank = auto-detect) Detected as: {framework_home}\n")
             
             else:
                 # Keep line as-is
