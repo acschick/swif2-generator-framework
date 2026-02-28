@@ -1091,14 +1091,20 @@ def create_ifnot_directory(Dir):
     if not os.path.exists(Dir):
         os.makedirs(Dir)
 
-def create_directory_plusone(Dir):
-    i_outdir = 0
-    outdir = Dir
-    while os.path.exists(outdir):
-        i_outdir += 1
-        outdir = f"{Dir}_{i_outdir}"
-    os.makedirs(outdir)
-    return outdir
+def create_directory_strict(Dir):
+    """
+    Create directory only if it doesn't exist. Fail if it does.
+    Forces user to manually delete or move existing directories.
+    """
+    if os.path.exists(Dir):
+        print(f"\nERROR: Directory already exists: {Dir}")
+        print("To proceed, either:")
+        print(f"  1. Delete it:  rm -rf {Dir}")
+        print(f"  2. Move it:    mv {Dir} {Dir}.backup")
+        print("\nThis prevents accidental overwrites and keeps JSON configs consistent.")
+        sys.exit(1)
+    os.makedirs(Dir)
+    return Dir
 
 def check_directory(Dir):
     if not os.path.exists(Dir):
@@ -1234,10 +1240,10 @@ def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logic
     workflow_name_base = '_'.join(gen_dir_name.split('/')[1:])  # Rest becomes workflow name
     farm_out_directory = os.path.join(f"/farm_out/{CUEusername}/RBHG/{study_name_from_dir}/generation", workflow_name_base)
     
-    out_dir = create_directory_plusone(gen_output_directory)
+    out_dir = create_directory_strict(gen_output_directory)
     sub_dir = os.path.join(f"{out_dir}", "FortranFiles")
     create_ifnot_directory(sub_dir)
-    farm_out_dir = create_directory_plusone(farm_out_directory)
+    farm_out_dir = create_directory_strict(farm_out_directory)
     
     # Dictionaries
     dir_name = gen_output_directory    
