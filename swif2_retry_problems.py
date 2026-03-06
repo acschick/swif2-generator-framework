@@ -317,6 +317,7 @@ PROBLEM_RESOURCE_FIXES = {
     'SLURM_OUT_OF_MEMORY': {'ram': ('mult', 2)},
     'SLURM_NODE_FAIL': {},  # Just retry, no modification needed
     'SLURM_DISK_QUOTA': {'disk': ('mult', 1.5)},
+    'SWIF_SYSTEM_ERROR': {},  # SWIF submission error - just retry (can't bless these)
     # Add more problem types as needed
 }
 
@@ -556,13 +557,23 @@ Examples:
             print("  Note: No vectors directory specified. Skipping cleanup and completion checking.")
             print("  Use --vectors to enable auto-detection and completion verification.")
         
-        # Bless complete jobs
+        # Bless complete jobs (except SWIF_SYSTEM_ERROR which must be retried)
         if complete_jobs:
-            complete_attempt_ids = [job['attempt_id'] for job in complete_jobs]
-            if bless_jobs(workflow_name, complete_attempt_ids, dry_run):
-                print(f"  ✓ {len(complete_jobs)} complete job(s) blessed")
-            elif not dry_run:
-                print("  ✗ Failed to bless complete jobs")
+            # Separate complete jobs by those that can be blessed vs must be retried
+            complete_bless = [j for j in complete_jobs if j.get('problem_type') != 'SWIF_SYSTEM_ERROR']
+            complete_retry = [j for j in complete_jobs if j.get('problem_type') == 'SWIF_SYSTEM_ERROR']
+            
+            if complete_bless:
+                complete_attempt_ids = [job['attempt_id'] for job in complete_bless]
+                if bless_jobs(workflow_name, complete_attempt_ids, dry_run):
+                    print(f"  ✓ {len(complete_bless)} complete job(s) blessed")
+                elif not dry_run:
+                    print("  ✗ Failed to bless complete jobs")
+            
+            if complete_retry:
+                # Add these to incomplete_jobs so they get retried
+                print(f"  Note: {len(complete_retry)} complete job(s) with SWIF_SYSTEM_ERROR will be retried (can't be blessed)")
+                incomplete_jobs.extend(complete_retry)
         
         # Handle incomplete jobs - group by problem type and apply smart fixes
         if incomplete_jobs:

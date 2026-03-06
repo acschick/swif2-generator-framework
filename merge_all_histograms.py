@@ -17,10 +17,14 @@ Usage:
   
   # Specify cleanup mode (move/delete/none):
   ./merge_all_histograms.py output/RBHG/CPP_FFS1/ --interactive --cleanup move
+  
+  # Force re-merge even if ROOT files already exist:
+  ./merge_all_histograms.py output/RBHG/CPP_FFS1/ --interactive --force
 
 This script:
 - Recursively finds all directories with hists/ subdirectories
 - For each found directory, merges histogram txt files into merged_histograms.root
+- By default, skips directories that already have merged ROOT files (use --force to override)
 - Can run interactively (sequential) or submit farm jobs (parallel)
 - Uses mergeHists.py from generators/RBHG/histogram_scripts/
 """
@@ -144,13 +148,29 @@ def generate_descriptive_filename(directory):
     return filename
 
 
-def merge_interactive(directory, cleanup_mode='none'):
+def check_already_merged(directory, output_filename):
+    """
+    Check if histograms are already merged for this directory.
+    
+    Args:
+        directory: Path to directory
+        output_filename: Expected output ROOT filename
+        
+    Returns:
+        True if merged ROOT file exists, False otherwise
+    """
+    output_path = os.path.join(directory, output_filename)
+    return os.path.exists(output_path)
+
+
+def merge_interactive(directory, cleanup_mode='none', skip_existing=True):
     """
     Merge histograms in a directory interactively (locally).
     
     Args:
         directory: Path to directory containing hists/ subdirectory
         cleanup_mode: 'none', 'move', or 'delete'
+        skip_existing: If True, skip directories with existing merged ROOT files
     """
     # Import mergeHists dynamically
     framework_home = os.path.dirname(os.path.abspath(__file__))
@@ -169,6 +189,12 @@ def merge_interactive(directory, cleanup_mode='none'):
     # Generate descriptive filename
     output_filename = generate_descriptive_filename(directory)
     
+    # Check if already merged
+    if skip_existing and check_already_merged(directory, output_filename):
+        print(f"Skipping: {directory}")
+        print(f"  Already merged: {output_filename}")
+        return 'skipped'
+    
     print(f"Merging: {directory}")
     print(f"  Output: {output_filename}")
     try:
@@ -182,19 +208,26 @@ def merge_interactive(directory, cleanup_mode='none'):
         return False
 
 
-def submit_farm_job(directory, cleanup_mode='none'):
+def submit_farm_job(directory, cleanup_mode='none', skip_existing=True):
     """
     Submit a SLURM farm job to merge histograms for one directory.
     
     Args:
         directory: Path to directory containing hists/ subdirectory
         cleanup_mode: 'none', 'move', or 'delete'
+        skip_existing: If True, skip directories with existing merged ROOT files
     """
     framework_home = os.path.dirname(os.path.abspath(__file__))
     merge_script = os.path.join(framework_home, 'generators/RBHG/histogram_scripts/mergeHists.py')
     
     # Generate descriptive filename
     output_filename = generate_descriptive_filename(directory)
+    
+    # Check if already merged
+    if skip_existing and check_already_merged(directory, output_filename):
+        print(f"Skipping: {directory}")
+        print(f"  Already merged: {output_filename}")
+        return 'skipped'
     
     # Determine cleanup argument
     cleanup_arg = f"cleanup_mode='{cleanup_mode}'" if cleanup_mode != 'none' else "cleanup_mode=None"
@@ -261,6 +294,12 @@ Examples:
   
   # With cleanup (move txt files to archived_histograms/):
   ./merge_all_histograms.py output/RBHG/CPP_FFS1/ --interactive --cleanup move
+  
+  # Force re-merge all directories (ignoring existing ROOT files):
+  ./merge_all_histograms.py output/RBHG/CPP_FFS1/ --interactive --force
+
+Note: By default, directories with existing merged ROOT files are skipped.
+      Use --force to re-merge everything.
         """
     )
     
@@ -274,6 +313,9 @@ Examples:
     
     parser.add_argument('--cleanup', choices=['none', 'move', 'delete'], default='none',
                        help='Cleanup mode for original txt files (default: none)')
+    
+    parser.add_argument('--force', action='store_true',
+                       help='Force re-merge even if ROOT file already exists')
     
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be merged without actually doing it')
@@ -322,16 +364,21 @@ Examples:
     # Process directories
     success_count = 0
     fail_count = 0
+    skipped_count = 0
+    
+    skip_existing = not args.force  # Skip if --force not specified
     
     print()
     for i, directory in enumerate(directories, 1):
         print(f"[{i}/{len(directories)}] ", end="", flush=True)
         if args.interactive:
-            success = merge_interactive(directory, args.cleanup)
+            result = merge_interactive(directory, args.cleanup, skip_existing)
         else:  # farm
-            success = submit_farm_job(directory, args.cleanup)
+            result = submit_farm_job(directory, args.cleanup, skip_existing)
         
-        if success:
+        if result == 'skipped':
+            skipped_count += 1
+        elif result:
             success_count += 1
         else:
             fail_count += 1
@@ -342,6 +389,7 @@ Examples:
     print("="*70)
     print(f"Total directories: {len(directories)}")
     print(f"Successful: {success_count}")
+    print(f"Skipped (already merged): {skipped_count}")
     print(f"Failed: {fail_count}")
     
     if args.farm:

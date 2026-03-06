@@ -141,14 +141,15 @@
     }
   },
   "2205": {
-    "description": "2022 CPP data (runs 110621-112001)",
+    "description": "2022 CPP data 100531–101622",
     "experiment": "CPP/NPP",
+    "run_range": "100531-101622",
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "background_version": "recon-2022_05-ver01.4",
     "batch_system": "swif2",
-    "jana_epem_ReaFil_config": "jana_2205_epem_ReaFil.config",
-    "jana_mupmum_ReaFil_config": "jana_2205_mupmum_ReaFil.config",
+    "jana_epem_ReaFil_config": "jana_CPPlaunch1_epem.config",
+    "jana_mupmum_ReaFil_config": "jana_CPPlaunch1_mupmum.config",
     "Polarizations": {
       "135DEG": {
         "characteristic_run": 101582,

@@ -4,6 +4,26 @@ This directory contains preset JANA configuration files for common MCWrapper ana
 
 ## Available Configurations
 
+### `jana_CPPlaunch1_epem.config`
+- **Use for**: CPP Launch 1 (2022-05, run period 2205) e+e- analysis
+- **Plugins**: ReactionFilter, monitoring_hists
+- **Features**: Primary e+e- reaction plus additional EM reactions (pi+pi-, pi0pi+pi-, Dalitz) for ML training
+- **Target**: Pb208
+- **Beam Bunches**: ±2
+
+### `jana_CPPlaunch1_mupmum.config`
+- **Use for**: CPP Launch 1 (2022-05, run period 2205) mu+mu- analysis
+- **Plugins**: ReactionFilter, monitoring_hists
+- **Features**: Primary mu+mu- reaction plus additional reactions (pi+pi-, pi0pi+pi-) for ML training
+- **Target**: Pb208
+- **Beam Bunches**: ±2
+
+### `jana_2205_mupmum_ReaFil.config`
+- **Use for**: 2022-05 mu+mu- basic analysis
+- **Plugins**: ReactionFilter, mcthrown_tree, danarest, monitoring_hists
+- **Features**: Simple mu+mu- ReactionFilter
+- **Target**: Pb208
+
 ### `2018_epem_standard.config`
 - **Use for**: 2018 Spring (1801) and Fall (1808) e+e- analysis
 - **Plugins**: ReactionFilter, danarest, monitoring_hists

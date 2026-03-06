@@ -27,6 +27,7 @@ try:
         merge_and_validate_hddm, count_directory_hddm_events,
         save_event_count_report
     )
+    import hddm_s
     print("Successfully imported utility modules")
 except ImportError as e:
     print(f"ERROR: Could not import utility modules: {e}")
@@ -205,6 +206,127 @@ def check_and_create_backfill_spec(config_data, expected_total, actual_total, ev
     
     return backfill_spec
 
+
+def check_hddm_precision(hddm_file, num_events=5, particle_type='ee'):
+    """
+    Check if HDDM file uses double or single precision by verifying mass reconstruction
+    
+    Tests a small number of events to see if we can accurately reproduce rest masses
+    from stored 4-vectors. Double precision should give errors < 0.01 MeV, single 
+    precision typically gives errors ~0.1-1 MeV.
+    
+    Args:
+        hddm_file (str): Path to HDDM file
+        num_events (int): Number of events to check (default 5)
+        particle_type (str): Particle type to determine expected masses
+        
+    Returns:
+        dict: Precision test results with keys:
+            - precision: 'double', 'single', or 'unknown'
+            - max_error_mev: Maximum mass reconstruction error
+            - mean_error_mev: Mean mass reconstruction error
+            - tested_events: Number of events tested
+            - details: Detailed error statistics
+    """
+    try:
+        import numpy as np
+        
+        # Expected masses in GeV
+        electron_mass = 0.000510999
+        muon_mass = 0.105658389
+        proton_mass = 0.93827208
+        
+        mass_errors = []
+        events_checked = 0
+        
+        # Read a few events and check mass reconstruction
+        for rec in hddm_s.istream(hddm_file):
+            if events_checked >= num_events:
+                break
+                
+            physicsEvent = rec.getPhysicsEvents()[0]
+            reaction = physicsEvent.getReactions()[0]
+            vertex = reaction.getVertices()[0]
+            products = vertex.getProducts()
+            
+            for product in products:
+                pdg = product.pdgtype
+                momentum = product.getMomenta()[0]
+                
+                E = momentum.E
+                px = momentum.px
+                py = momentum.py
+                pz = momentum.pz
+                
+                # Calculate mass: m² = E² - p²
+                p_squared = px**2 + py**2 + pz**2
+                m_squared = E**2 - p_squared
+                
+                if m_squared < 0:
+                    mass = -np.sqrt(-m_squared)
+                else:
+                    mass = np.sqrt(m_squared)
+                
+                # Determine expected mass based on PDG type
+                expected_mass = None
+                if pdg in [11, -11]:  # electron/positron
+                    expected_mass = electron_mass
+                elif pdg in [13, -13]:  # muon
+                    expected_mass = muon_mass
+                elif pdg == 2212:  # proton
+                    expected_mass = proton_mass
+                    
+                if expected_mass:
+                    error_mev = abs(mass - expected_mass) * 1000
+                    mass_errors.append(error_mev)
+            
+            events_checked += 1
+        
+        if not mass_errors:
+            return {
+                'precision': 'unknown',
+                'max_error_mev': None,
+                'mean_error_mev': None,
+                'tested_events': events_checked,
+                'details': 'No suitable particles found for mass check'
+            }
+        
+        errors_array = np.array(mass_errors)
+        max_error = np.max(errors_array)
+        mean_error = np.mean(errors_array)
+        
+        # Classify precision based on typical errors
+        # Double precision: errors < 0.01 MeV
+        # Single precision: errors typically 0.1-1 MeV
+        if max_error < 0.01:
+            precision = 'double'
+        elif max_error < 0.1:
+            precision = 'likely_double'
+        elif max_error < 1.0:
+            precision = 'single'
+        else:
+            precision = 'single_or_issue'
+        
+        return {
+            'precision': precision,
+            'max_error_mev': float(max_error),
+            'mean_error_mev': float(mean_error),
+            'std_error_mev': float(np.std(errors_array)),
+            'tested_events': events_checked,
+            'tested_particles': len(mass_errors),
+            'details': f"Tested {len(mass_errors)} particles from {events_checked} events"
+        }
+        
+    except Exception as e:
+        return {
+            'precision': 'unknown',
+            'max_error_mev': None,
+            'mean_error_mev': None,
+            'tested_events': 0,
+            'details': f'Error during precision check: {e}'
+        }
+
+
 def process_individual_directory(config_data, config_path):
     """
     Process a single directory (Level 1 config)
@@ -255,30 +377,186 @@ def process_individual_directory(config_data, config_path):
         print(f"  Expected events per file: {expected_events_per_file}")
         
         # Step 1: Merge HDDM files and validate event counts
-        # Use the generation directory name as the base for the merged HDDM filename
-        # e.g. 1801_0DEG_DBLRAD_GlueX_ee_Berlin_v113.hddm for clarity
+        # Generate descriptive merged HDDM filename
+        # For CPP experiments, use format: CPP_FFS1_qDATAq_FFN_2205_45DEG_IRADOFF.hddm
+        # For GlueX, use: 1801_0DEG_DBLRAD_GlueX_ee_Berlin_v113.hddm
+        study_name = extract_config_value(config_data,
+            ['rbhg_config.generation_info.study_name', 'generation_info.study_name', 'study_name'], '')
+        nametag = extract_config_value(config_data,
+            ['rbhg_config.generation_info.nametag', 'generation_info.nametag', 'nametag'], '')
+        form_factor = extract_config_value(config_data,
+            ['rbhg_config.physics_settings.form_factor', 'physics_settings.form_factor', 'form_factor'], '')
+        
         gen_dir_name = os.path.basename(os.path.dirname(vectors_dir))
-        merged_hddm_file = os.path.join(vectors_dir, f"{gen_dir_name}.hddm")
+        
+        # Build descriptive filename
+        if study_name and nametag and form_factor:
+            # CPP-style: Study_Nametag_FormFactor_DirectoryName
+            merged_basename = f"{study_name}_{nametag}_{form_factor}_{gen_dir_name}"
+        else:
+            # Fallback: just use directory name
+            merged_basename = gen_dir_name
+        
+        merged_hddm_file = os.path.join(vectors_dir, f"{merged_basename}.hddm")
 
-        print(f"  Merging HDDM files to: {merged_hddm_file}")
+        # Check if merged HDDM file already exists
+        # Try multiple possible naming patterns:
+        # 1. gen_dir_name.hddm (e.g., 2205_45DEG_FFN_IRADOFF.hddm)
+        # 2. Any other .hddm file in the directory (user may have merged with different name)
+        existing_merged_file = None
         
-        merge_results = merge_and_validate_hddm(
-            input_dir=vectors_dir,
-            output_file=merged_hddm_file,
-            expected_events_per_file=expected_events_per_file,
-            pattern="vectors_*.hddm",
-            validate_before=True,
-            validate_after=True
-        )
+        if os.path.exists(merged_hddm_file):
+            existing_merged_file = merged_hddm_file
+        else:
+            # Look for any .hddm file in vectors directory (excluding vectors_*.hddm pattern)
+            import glob
+            all_hddm = glob.glob(os.path.join(vectors_dir, "*.hddm"))
+            # Exclude individual vectors files (vectors_0.hddm, vectors_123.hddm, etc.)
+            merged_candidates = [f for f in all_hddm if not os.path.basename(f).startswith('vectors_')]
+            
+            if merged_candidates:
+                # Use the first (likely only) merged file found
+                existing_merged_file = merged_candidates[0]
+                if len(merged_candidates) > 1:
+                    print(f"  WARNING: Found multiple potential merged HDDM files:")
+                    for f in merged_candidates:
+                        print(f"    - {os.path.basename(f)}")
+                    print(f"  Using: {os.path.basename(existing_merged_file)}")
+
+        if existing_merged_file:
+            print(f"  Found existing merged HDDM file: {os.path.basename(existing_merged_file)}")
+            file_size_gb = os.path.getsize(existing_merged_file) / (1024**3)
+            print(f"    File size: {file_size_gb:.2f} GB")
+            print(f"    Skipping merge step...")
+            
+            # Check if event count is already cached in JSON
+            cached_event_count = extract_config_value(config_data,
+                ['rbhg_config.event_validation.merged_event_count',
+                 'event_validation.merged_event_count',
+                 'merged_event_count'], None)
+            
+            if cached_event_count and isinstance(cached_event_count, int) and cached_event_count > 0:
+                print(f"    Using cached event count from config: {cached_event_count:,} events")
+                event_count = cached_event_count
+            else:
+                # Count events in existing merged file
+                from hddm_event_utils import count_hddm_events
+                try:
+                    print(f"    Counting events in merged HDDM file (this may take a few minutes for large files)...")
+                    import time
+                    start_time = time.time()
+                    event_count = count_hddm_events(existing_merged_file)
+                    elapsed = time.time() - start_time
+                    print(f"    Event count in merged file: {event_count:,} events (counted in {elapsed:.1f}s)")
+                    
+                    # Cache the event count in the JSON config for future runs
+                    try:
+                        if 'rbhg_config' in config_data:
+                            if 'event_validation' not in config_data['rbhg_config']:
+                                config_data['rbhg_config']['event_validation'] = {}
+                            config_data['rbhg_config']['event_validation']['merged_event_count'] = event_count
+                            config_data['rbhg_config']['event_validation']['merged_hddm_file'] = os.path.basename(existing_merged_file)
+                        else:
+                            config_data['merged_event_count'] = event_count
+                        
+                        # Save updated config
+                        with open(config_path, 'w', encoding='utf-8') as f:
+                            json.dump(config_data, f, indent=2)
+                        print(f"    Cached event count in config file for future runs")
+                    except Exception as save_err:
+                        print(f"    Note: Could not cache event count: {save_err}")
+                except Exception as e:
+                    print(f"    WARNING: Could not count events in existing merged file: {e}")
+                    print(f"    Proceeding anyway, assuming merge was previously completed successfully")
+                    event_count = 0
+            
+            results['merged_hddm_file'] = existing_merged_file
+            results['event_count'] = event_count
+            merge_results = {'merge_successful': True, 'validation_passed': event_count > 0, 
+                            'event_counts': {'output_actual': event_count}}
+            
+            # Update merged_hddm_file to point to the file we actually found
+            merged_hddm_file = existing_merged_file
+        else:
+            print(f"  Merging HDDM files to: {merged_hddm_file}")
+            
+            merge_results = merge_and_validate_hddm(
+                input_dir=vectors_dir,
+                output_file=merged_hddm_file,
+                expected_events_per_file=expected_events_per_file,
+                pattern="vectors_*.hddm",
+                validate_before=True,
+                validate_after=True
+            )
+            
+            if not merge_results['merge_successful']:
+                raise RuntimeError("HDDM merge failed")
+            
+            if not merge_results['validation_passed']:
+                print("  WARNING: Event count validation failed, but continuing...")
+            
+            results['merged_hddm_file'] = merged_hddm_file
+            results['event_count'] = merge_results['event_counts'].get('output_actual', 0)
+            
+            # Cache the event count in the JSON config for future runs
+            try:
+                if 'rbhg_config' in config_data:
+                    if 'event_validation' not in config_data['rbhg_config']:
+                        config_data['rbhg_config']['event_validation'] = {}
+                    config_data['rbhg_config']['event_validation']['merged_event_count'] = results['event_count']
+                    config_data['rbhg_config']['event_validation']['merged_hddm_file'] = os.path.basename(merged_hddm_file)
+                else:
+                    config_data['merged_event_count'] = results['event_count']
+                
+                # Save updated config
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2)
+                print(f"  Cached event count ({results['event_count']:,}) in config file")
+            except Exception as save_err:
+                print(f"  Note: Could not cache event count: {save_err}")
         
-        if not merge_results['merge_successful']:
-            raise RuntimeError("HDDM merge failed")
+        # Step 1b: Check HDDM 4-vector precision (double vs single)
+        # Check if precision is already cached
+        cached_precision = extract_config_value(config_data,
+            ['rbhg_config.event_validation.hddm_precision',
+             'event_validation.hddm_precision'], None)
         
-        if not merge_results['validation_passed']:
-            print("  WARNING: Event count validation failed, but continuing...")
-        
-        results['merged_hddm_file'] = merged_hddm_file
-        results['event_count'] = merge_results['event_counts'].get('output_actual', 0)
+        if cached_precision:
+            print(f"  Using cached HDDM precision: {cached_precision}")
+        else:
+            print(f"  Testing HDDM 4-vector precision (checking first 5 events)...")
+            particle_type = extract_config_value(config_data,
+                ['rbhg_config.physics_settings.lepton_type', 'lepton_type'], 'ee')
+            
+            precision_result = check_hddm_precision(merged_hddm_file, num_events=5, 
+                                                   particle_type=particle_type)
+            
+            precision_str = precision_result['precision']
+            if precision_result['max_error_mev'] is not None:
+                print(f"    Precision: {precision_str} (max error: {precision_result['max_error_mev']:.4f} MeV, "
+                      f"mean: {precision_result['mean_error_mev']:.4f} MeV)")
+                
+                # Cache precision result
+                try:
+                    if 'rbhg_config' in config_data:
+                        if 'event_validation' not in config_data['rbhg_config']:
+                            config_data['rbhg_config']['event_validation'] = {}
+                        config_data['rbhg_config']['event_validation']['hddm_precision'] = precision_str
+                        config_data['rbhg_config']['event_validation']['precision_max_error_mev'] = precision_result['max_error_mev']
+                        config_data['rbhg_config']['event_validation']['precision_mean_error_mev'] = precision_result['mean_error_mev']
+                    
+                    # Save updated config
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, indent=2)
+                except Exception as save_err:
+                    print(f"    Note: Could not cache precision result: {save_err}")
+                    
+                # Warn if precision seems poor
+                if 'single' in precision_str.lower():
+                    print(f"    NOTE: Single precision detected. Consider regenerating with double precision")
+                    print(f"          for better mass reconstruction (add use_doubles=True to ascii2hddm)")
+            else:
+                print(f"    Could not determine precision: {precision_result['details']}")
         
         # Step 2: Check if backfill jobs are needed
         expected_total_events = extract_config_value(config_data,
@@ -304,14 +582,19 @@ def process_individual_directory(config_data, config_path):
         # This goes on /work/ next to vectors/, not on /volatile/
         mcwrapper_dir = os.path.join(os.path.dirname(vectors_dir), 'MCWrapper')
         
-        if not os.path.exists(mcwrapper_dir):
+        if os.path.exists(mcwrapper_dir):
+            print(f"  Found existing MCWrapper directory: {mcwrapper_dir}")
+            print(f"    Skipping MCWrapper creation...")
+            results['mcwrapper_created'] = True
+            mcwrapper_success = True
+        else:
             os.makedirs(mcwrapper_dir, exist_ok=True)
             print(f"  Created MCWrapper directory: {mcwrapper_dir}")
-        
-        # Create MCWrapper configuration files (reuse logic from original prepSim.py)
-        # Pass the actual merged event count to use in gluex_MC_sub scripts
-        mcwrapper_success = create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, results['event_count'])
-        results['mcwrapper_created'] = mcwrapper_success
+            
+            # Create MCWrapper configuration files (reuse logic from original prepSim.py)
+            # Pass the actual merged event count to use in gluex_MC_sub scripts
+            mcwrapper_success = create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, results['event_count'])
+            results['mcwrapper_created'] = mcwrapper_success
         
         if mcwrapper_success:
             results['success'] = True
@@ -367,9 +650,13 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             os.path.join(os.path.dirname(__file__), 'template_MCWrapper'))
         
         # Extract information from config - flexible field access  
-        run_period = extract_config_value(config_data,
+        run_period_raw = extract_config_value(config_data,
             ['rbhg_config.physics_settings.run_period', 'run_period', 
              'physics_settings.run_period'], '1801')
+        
+        # For RunPeriods.json lookup, extract just the numeric run period
+        # e.g., '2205_AMO_FFS' -> '2205', '1801' -> '1801'
+        run_period = run_period_raw.split('_')[0] if '_' in str(run_period_raw) else run_period_raw
         
         run_number = extract_config_value(config_data,
             ['rbhg_config.physics_settings.run_number', 'run_number',
@@ -427,6 +714,23 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         bkg = mcw_settings.get('background_version', 'NONE')
         rcdb_query = mcw_settings.get('rcdb_query', '')
         
+        # Auto-generate RCDB query for CPP if not explicitly set
+        if not rcdb_query and experiment_type == 'CPP':
+            # Build CPP-specific RCDB query
+            # Base query: production runs that are approved with full target
+            rcdb_query = '@is_cpp_production and @status_approved and target_type=="FULL"'
+            
+            # Add polarization constraint based on directory polarization
+            if polarization.upper() == 'AMO':
+                # AMO (amorphous) has polarization_angle = -1.0 (alternative: 'AMO' also works)
+                rcdb_query += ' and polarization_angle==-1.0'
+            elif polarization.replace('DEG', '').replace('deg', '').isdigit():
+                # Numeric polarization (45DEG, 135DEG, etc.)
+                pol_value = polarization.replace('DEG', '').replace('deg', '')
+                rcdb_query += f' and polarization_angle=={pol_value}'
+            
+            print(f"    Auto-generated CPP RCDB query: {rcdb_query}")
+        
         # Substitute {polDeg} placeholder in RCDB query with actual polarization value
         # For AMO (amorphous), use '-1.0'; for degree values like '0DEG', extract the number
         if '{polDeg}' in rcdb_query:
@@ -439,17 +743,22 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         
         variation = mcw_settings.get('variation', 'mc')
         batch_system = mcw_settings.get('batch_system', 'swif2')
-        run_range = mcw_settings.get('run_range', f'{run_number} {run_number}')
-
-        # Honor USE_CHARACTERISTIC_RUN if requested. This can be provided in
-        # the per-generation mcwrapper_settings as 'USE_CHARACTERISTIC_RUN' (or
-        # lower-case 'use_characteristic_run'), or as a top-level flag in the
-        # generation JSON under rbhg_config (rbhg_config.mcwrapper_use_characteristic_run).
+        run_range = mcw_settings.get('run_range', '')
+        
+        # Determine if we should use characteristic run
+        # Use characteristic run if:
+        # 1. Explicitly requested via use_characteristic_run flag
+        # 2. Background is disabled (NONE or empty) - requires single run for background matching
         use_characteristic = mcw_settings.get('USE_CHARACTERISTIC_RUN', mcw_settings.get('use_characteristic_run', False))
         if not use_characteristic:
             # Check top-level config fields as a fallback
             use_characteristic = extract_config_value(config_data,
                 ['rbhg_config.mcwrapper_use_characteristic_run', 'rbhg_config.use_characteristic_run'], False)
+        
+        # If background is off, automatically use characteristic run
+        if not use_characteristic and (not bkg or bkg.upper() == 'NONE'):
+            use_characteristic = True
+            print(f"    Background disabled (bkg={bkg}): automatically using characteristic run")
 
         if use_characteristic:
             # Attempt to read RunPeriods.json from framework home
@@ -467,11 +776,46 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
                 if char_run:
                     # Use single characteristic run as the run range (single value)
                     run_range = str(char_run)
-                    print(f"    USE_CHARACTERISTIC_RUN enabled: setting run_range to characteristic run {run_range}")
+                    print(f"    Use characteristic run: {run_range}")
                 else:
-                    print(f"    WARNING: USE_CHARACTERISTIC_RUN enabled but no characteristic_run found for run_period={run_period}, polarization={polarization}; falling back to configured run_range={run_range}")
+                    print(f"    WARNING: USE_CHARACTERISTIC_RUN enabled but no characteristic_run found for run_period={run_period}, polarization={polarization}")
             except Exception as e:
-                print(f"    WARNING: failed to read RunPeriods.json ({runperiods_path}): {e}; using configured run_range={run_range}")
+                print(f"    WARNING: failed to read RunPeriods.json ({runperiods_path}): {e}")
+        
+        # If run_range still not set, try to look it up from RunPeriods.json
+        if not run_range or run_range.strip() == '':
+            framework_home = extract_config_value(config_data,
+                ['rbhg_config.directory_paths.base_paths.framework_home', 'framework_home'], os.path.dirname(__file__))
+            runperiods_path = os.path.join(framework_home, 'RunPeriods.json')
+            try:
+                with open(runperiods_path, 'r') as rp_f:
+                    rp_data = json.load(rp_f)
+                
+                rp_entry = rp_data.get(str(run_period)) or rp_data.get('default') or {}
+                
+                # Try to get run_range from RunPeriods.json
+                run_range = rp_entry.get('run_range', '')
+                
+                if run_range:
+                    print(f"    Using run_range from RunPeriods.json: {run_range}")
+                else:
+                    # Fallback to characteristic run if no run_range found
+                    pol_entry = rp_entry.get('Polarizations', {}).get(polarization, {})
+                    char_run = pol_entry.get('characteristic_run') or rp_entry.get('characteristic_run')
+                    
+                    if char_run:
+                        run_range = str(char_run)
+                        print(f"    No run_range in RunPeriods.json, using characteristic run: {run_range}")
+                    elif run_number and run_number != 'None':
+                        run_range = str(run_number)
+                        print(f"    Fallback: using run_number from config: {run_range}")
+                    else:
+                        print(f"    WARNING: No run_range, characteristic_run, or run_number found; run_range will be empty")
+            except Exception as e:
+                print(f"    WARNING: Could not look up run_range from RunPeriods.json: {e}")
+                if run_number and run_number != 'None':
+                    run_range = str(run_number)
+                    print(f"    Fallback: using run_number from config: {run_range}")
         
         # Pipeline control flags
         geant = mcw_settings.get('geant', 1)
@@ -578,7 +922,7 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         disk_request_gb = hddm_size_gb
         disk_request = f"{disk_request_gb}GB"
         
-        print(f"    Creating MCWrapper config for {run_period} {polarization} {particle_type}")
+        print(f"    Creating MCWrapper config for {run_period_raw} {polarization} {particle_type}")
         print(f"    Using template directory: {template_dir}")
         print(f"    HDDM file: {merged_hddm_file}")
         print(f"    Target: {target}, Events: {nevents}")
@@ -627,7 +971,8 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
                 # CPP-specific settings
                 if experiment_type == 'CPP':
                     env_replacements['RBHGCPPGEOMETRY'] = 'setenv JANA_GEOMETRY_URL "ccdb:///GEOMETRY/cpp_HDDS.xml"'
-                    env_replacements['RBHGCPPMCVARIATION'] = 'setenv JANA_CALIB_CONTEXT "variation=mc_cpp"'
+                    # Note: JANA_CALIB_CONTEXT variation=mc_cpp is deprecated and no longer needed
+                    env_replacements['RBHGCPPMCVARIATION'] = ''
                 else:
                     env_replacements['RBHGCPPGEOMETRY'] = ''
                     env_replacements['RBHGCPPMCVARIATION'] = ''
@@ -700,10 +1045,20 @@ ANA_OS=CENTOS7"""
         except Exception as e:
             print(f"      ERROR creating MC.config: {e}")
         
-        # 4. Create gluex_MC_sub.csh from template  
-        print(f"    Creating gluex_MC_sub.csh...")
-        sub_csh_path = os.path.join(mcwrapper_dir, 'gluex_MC_sub.csh')
-        template_sub = os.path.join(template_dir, 'temp_gluex_MC_sub.csh')
+        # 4. Create gluex_MC_sub script from template
+        # For containerized systems (swif2cont), use bash (.sh)
+        # For native systems (swif2), use tcsh (.csh)
+        if batch_system == 'swif2cont':
+            sub_script_name = 'gluex_MC_sub.sh'
+            template_name = 'temp_gluex_MC_sub.sh'
+            print(f"    Creating gluex_MC_sub.sh (bash for containers)...")
+        else:
+            sub_script_name = 'gluex_MC_sub.csh'
+            template_name = 'temp_gluex_MC_sub.csh'
+            print(f"    Creating gluex_MC_sub.csh (tcsh for native)...")
+        
+        sub_csh_path = os.path.join(mcwrapper_dir, sub_script_name)
+        template_sub = os.path.join(template_dir, template_name)
         
         try:
             shutil.copy(template_sub, sub_csh_path)
@@ -998,14 +1353,20 @@ def process_ffs_master(config_data, config_path):
     
     return results
 
-def prompt_histogram_merging(config_data, config_path):
+def prompt_histogram_merging(config_data, config_path, auto_merge=False, skip_prompt=False):
     """
     Prompt user to merge RBHG histogram files if applicable
     
     Args:
         config_data (dict): Configuration data
         config_path (str): Path to configuration file
+        auto_merge (bool): If True, automatically merge without prompting
+        skip_prompt (bool): If True, skip prompting entirely (for batch processing)
     """
+    # Skip prompt if requested (for unattended batch processing)
+    if skip_prompt:
+        return
+    
     # Check if this is RBHG-related
     is_rbhg = ('rbhg_config' in config_data or 
                any('rbhg' in str(v).lower() for v in str(config_data).lower().split()[:100]))
@@ -1033,7 +1394,12 @@ def prompt_histogram_merging(config_data, config_path):
     print("  2. All directories:   ./merge_all_histograms.py <path> --interactive")
     print("  3. Farm submission:   ./merge_all_histograms.py <path> --farm")
     
-    response = input("\nWould you like to merge histograms now? (y/n): ").strip().lower()
+    # Determine if we should merge based on auto_merge flag or user input
+    if auto_merge:
+        print("\n--merge-histograms flag detected: automatically merging histograms")
+        response = 'y'
+    else:
+        response = input("\nWould you like to merge histograms now? (y/n): ").strip().lower()
     
     if response == 'y':
         # Try to find hists directory from config
@@ -1053,7 +1419,12 @@ def prompt_histogram_merging(config_data, config_path):
         
         if hists_dir:
             print(f"\nFound hists directory at: {hists_dir}/hists/")
-            proceed = input("Proceed with merging? (y/n): ").strip().lower()
+            
+            # Auto-proceed if auto_merge is set, otherwise prompt
+            if auto_merge:
+                proceed = 'y'
+            else:
+                proceed = input("Proceed with merging? (y/n): ").strip().lower()
             
             if proceed == 'y':
                 try:
@@ -1111,6 +1482,12 @@ Examples:
   
   # Dry run (validate configs without processing)
   python prepareSimulation.py path/to/config.json --dry-run
+  
+  # Unattended batch processing (no prompts)
+  python prepareSimulation.py path/to/ffs_master_config.json --no-merge-prompt
+  
+  # Auto-merge histograms when done
+  python prepareSimulation.py path/to/config.json --merge-histograms
         """
     )
     
@@ -1120,6 +1497,10 @@ Examples:
                        help='Validate configuration without processing')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose output')
+    parser.add_argument('--merge-histograms', action='store_true',
+                       help='Automatically merge histograms after processing (no prompt)')
+    parser.add_argument('--no-merge-prompt', action='store_true',
+                       help='Skip histogram merge prompt (for unattended batch processing)')
     
     args = parser.parse_args()
     
@@ -1149,7 +1530,9 @@ Examples:
             print(f"\nSUCCESS: Processing completed for {config_type} configuration")
             
             # Offer histogram merging for RBHG configurations
-            prompt_histogram_merging(config_data, args.config)
+            prompt_histogram_merging(config_data, args.config, 
+                                   auto_merge=args.merge_histograms,
+                                   skip_prompt=args.no_merge_prompt)
             
             return 0
         else:
