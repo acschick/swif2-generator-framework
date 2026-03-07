@@ -108,7 +108,7 @@ def get_particle_info(particle_name):
         'kp':      {'geant_pid': 11, 'pdg_type': 321,        'mass': 0.493677,     'charge': 1},
         'eta':     {'geant_pid': 17, 'pdg_type': 221,        'mass': 0.547862,     'charge': 0},
         'proton':  {'geant_pid': 14, 'pdg_type': 2212,       'mass': 0.93827208,   'charge': 1},
-        'pb208':   {'geant_pid': 111,'pdg_type': 1000822080, 'mass': 193.688,      'charge': 82}
+        'pb208':   {'geant_pid': 111,'pdg_type': 1000822080, 'mass': 193.7507,     'charge': 82}
     }
     
     if particle_name not in particle_db:
@@ -122,7 +122,7 @@ def get_particle_info(particle_name):
 
 
 def ascii2hddm(final_state_string, target_type, input_file, output_file, 
-               runNumber=0, vertex=None, use_doubles=True):
+               runNumber=0, vertex=None, use_doubles=True, include_recoil=False):
     """
     Convert ASCII generator output to HDDM format with arbitrary final state
     
@@ -134,15 +134,12 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         runNumber: Run number to embed in HDDM
         vertex: Vertex string 'vx vy zmin zmax'
         use_doubles: Add momentum_double for all particles (default: True)
+        include_recoil: Write recoil nucleus to HDDM (default: False for pb208, True for proton)
     """
     
     # Parse final state
     particles = parse_final_state(final_state_string)
     n_particles = len(particles)
-    
-    print(f"Final state: {final_state_string}")
-    print(f"  Parsed as: {' + '.join(particles)} + recoil")
-    print(f"  Number of products: {n_particles} particles + 1 recoil = {n_particles + 1} total")
     
     # Get particle information
     particle_infos = [get_particle_info(p) for p in particles]
@@ -156,10 +153,21 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
     target_name = 'proton' if target_type == 'p' else 'pb208'
     target_info = get_particle_info(target_name)
     
+    # Determine if recoil should be written to HDDM
+    # Default: include recoil for proton, exclude for pb208 (heavy nuclei never escape target)
+    # User can override with include_recoil flag
+    write_recoil = include_recoil if include_recoil else (target_type == 'p')
+    
     # Calculate expected column count
     # Format: E_beam, [E1, p1x, p1y, p1z], [E2, p2x, p2y, p2z], ..., [E_recoil, prx, pry, prz]
     expected_cols = 1 + 4 * n_particles + 4  # beam + N*(E,px,py,pz) + recoil(E,px,py,pz)
     
+    print(f"Final state: {final_state_string}")
+    print(f"  Parsed as: {' + '.join(particles)} + recoil")
+    if write_recoil:
+        print(f"  HDDM products: {n_particles} particles + 1 recoil = {n_particles + 1} total")
+    else:
+        print(f"  HDDM products: {n_particles} particles (recoil not written to HDDM)")
     print(f"  Expected columns: {expected_cols}")
     print(f"    Format: E_beam, {', '.join([f'{p}(E,px,py,pz)' for p in particles])}, recoil(E,px,py,pz)")
 
@@ -272,8 +280,9 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
         origin[0].vz = random.uniform(vz_min, vz_max)
         origin[0].t = 0.0
         
-        # Create products: N particles + 1 recoil
-        prod = vtx[0].addProducts(n_particles + 1)
+        # Create products: N particles + recoil (if writing recoil)
+        n_products = n_particles + 1 if write_recoil else n_particles
+        prod = vtx[0].addProducts(n_products)
 
         # Add all particles in order
         for i, (info, (E_particle, px_particle, py_particle, pz_particle)) in enumerate(zip(particle_infos, particle_4momenta)):
@@ -306,36 +315,37 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
             props[0].charge = info['charge']
             props[0].mass = info['mass']
 
-        # Add recoil as final product
-        recoil_idx = n_particles
-        prod[recoil_idx].id = recoil_idx + 1
-        prod[recoil_idx].pdgtype = target_info['pdg_type']
-        prod[recoil_idx].type = target_info['geant_pid']
-        prod[recoil_idx].mech = 909
-        prod[recoil_idx].parentid = 0
-        prod[recoil_idx].decayVertex = 0
-        
-        mom_recoil = prod[recoil_idx].addMomenta()
-        # PASS THROUGH values directly from generator
-        # The generator has already enforced energy conservation in float32
-        # DO NOT recalculate E - that would break energy conservation!
-        mom_recoil[0].E = float(np.float32(E_recoil))
-        mom_recoil[0].px = float(np.float32(px_recoil))
-        mom_recoil[0].py = float(np.float32(py_recoil))
-        mom_recoil[0].pz = float(np.float32(pz_recoil))
-        
-        # Add double precision momentum for recoil (default behavior)
-        if use_doubles:
-            mom_recoil_double = mom_recoil[0].addMomentum_doubles()
-            mom_recoil_double[0].E = E_recoil
-            mom_recoil_double[0].px = px_recoil
-            mom_recoil_double[0].py = py_recoil
-            mom_recoil_double[0].pz = pz_recoil
-        
-        # Add properties with correct mass for recoil
-        props_recoil = prod[recoil_idx].addPropertiesList()
-        props_recoil[0].charge = target_info['charge']
-        props_recoil[0].mass = target_info['mass']
+        # Add recoil as final product (if requested)
+        if write_recoil:
+            recoil_idx = n_particles
+            prod[recoil_idx].id = recoil_idx + 1
+            prod[recoil_idx].pdgtype = target_info['pdg_type']
+            prod[recoil_idx].type = target_info['geant_pid']
+            prod[recoil_idx].mech = 909
+            prod[recoil_idx].parentid = 0
+            prod[recoil_idx].decayVertex = 0
+            
+            mom_recoil = prod[recoil_idx].addMomenta()
+            # PASS THROUGH values directly from generator
+            # The generator has already enforced energy conservation in float32
+            # DO NOT recalculate E - that would break energy conservation!
+            mom_recoil[0].E = float(np.float32(E_recoil))
+            mom_recoil[0].px = float(np.float32(px_recoil))
+            mom_recoil[0].py = float(np.float32(py_recoil))
+            mom_recoil[0].pz = float(np.float32(pz_recoil))
+            
+            # Add double precision momentum for recoil (default behavior)
+            if use_doubles:
+                mom_recoil_double = mom_recoil[0].addMomentum_doubles()
+                mom_recoil_double[0].E = E_recoil
+                mom_recoil_double[0].px = px_recoil
+                mom_recoil_double[0].py = py_recoil
+                mom_recoil_double[0].pz = pz_recoil
+            
+            # Add properties with correct mass for recoil
+            props_recoil = prod[recoil_idx].addPropertiesList()
+            props_recoil[0].charge = target_info['charge']
+            props_recoil[0].mass = target_info['mass']
         
         fout.write(rec)
 
@@ -346,6 +356,7 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
     if skipped_lines > 0:
         print(f"  Lines skipped: {skipped_lines}")
     print(f"  Output file: {output_file}")
+    print(f"  Products per event: {n_products} ({n_particles} particles{' + recoil' if write_recoil else ', no recoil'})")
     if use_doubles:
         print(f"  Precision: Double precision (momentum_double added)")
     else:
@@ -370,15 +381,20 @@ Particle Codes:
   eta  = eta        (eta meson)
 
 Examples:
-  %(prog)s epem p input.txt output.hddm              # e+ e- pair production
-  %(prog)s em p single_e.txt output.hddm             # single electron
-  %(prog)s mupmum pb208 muons.txt output.hddm        # mu+ mu- on lead
+  %(prog)s epem p input.txt output.hddm              # e+ e- on proton (includes recoil proton)
+  %(prog)s em p single_e.txt output.hddm             # single electron on proton
+  %(prog)s mupmum pb208 muons.txt output.hddm        # mu+ mu- on lead (NO recoil by default)
+  %(prog)s epem pb208 input.txt out.hddm --include-recoil  # Force recoil Pb208 in HDDM
   %(prog)s pi0 p pi0_events.txt output.hddm          # single pi0
   %(prog)s pi0pippim p three_pion.txt output.hddm    # pi0 pi+ pi- (3 pions)
   %(prog)s pippimpi0 p three_pion.txt output.hddm    # pi+ pi- pi0 (different order)
   %(prog)s ememem p triple_e.txt output.hddm         # 3 electrons
   %(prog)s epempippim p mixed.txt output.hddm        # e+ e- pi+ pi-
-  %(prog)s mupmumpippimpi0 pb208 big.txt out.hddm    # 5-particle final state
+
+Recoil handling:
+  - Proton target (p): Recoil proton written to HDDM by default
+  - Lead target (pb208): Recoil Pb208 NOT written by default (saves ~10-15% file size)
+  - Use --include-recoil to force writing recoil for any target
 
 The script automatically determines:
   - Number of particles (from final state string)
@@ -408,6 +424,10 @@ The script automatically determines:
                         action="store_true",
                         help="Do NOT add momentum_double (use single precision only). "
                              "Default is to add double precision for all momenta.")
+    parser.add_argument("--include-recoil", 
+                        action="store_true",
+                        help="Write recoil nucleus to HDDM file. "
+                             "Default: True for proton, False for pb208 (heavy recoils never escape target).")
     
     args = parser.parse_args()
 
@@ -417,6 +437,7 @@ The script automatically determines:
         input_file=args.input_file,
         output_file=args.output_file,
         use_doubles=not args.no_doubles,
+        include_recoil=args.include_recoil,
         runNumber=args.run,
         vertex=args.vertex
     )
