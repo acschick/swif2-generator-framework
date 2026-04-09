@@ -174,7 +174,7 @@ def save_event_count_report(directory, output_file=None, pattern="vectors_*.hddm
     return output_file
 
 def merge_and_validate_hddm(input_dir, output_file, expected_events_per_file=50000, 
-                          pattern="vectors_*.hddm", validate_before=True, validate_after=True):
+                          pattern="vectors_*.hddm", validate_before=True, validate_after=True, skim_percent=None):
     """
     Merge HDDM files with event count validation
     
@@ -185,6 +185,7 @@ def merge_and_validate_hddm(input_dir, output_file, expected_events_per_file=500
         pattern (str): Pattern for input files
         validate_before (bool): Validate input files before merging
         validate_after (bool): Validate output file after merging
+        skim_percent (float): Optional percentage (0-100) of files to merge (e.g., 80 for 80%)
         
     Returns:
         dict: Merge and validation results
@@ -244,18 +245,39 @@ def merge_and_validate_hddm(input_dir, output_file, expected_events_per_file=500
     
     print(f"Using {len(non_empty_files)} non-empty files for merge")
     
+    # Apply skim percentage if requested
+    files_to_merge = non_empty_files
+    if skim_percent is not None:
+        if not (0 < skim_percent <= 100):
+            print(f"ERROR: skim_percent must be between 0 and 100, got {skim_percent}")
+            return results
+        
+        # Sort files for deterministic behavior
+        files_to_merge = sorted(non_empty_files)
+        
+        # Calculate how many files to keep
+        total_files = len(files_to_merge)
+        files_to_keep = max(1, int(total_files * skim_percent / 100.0))
+        
+        # Take only the first N files
+        files_to_merge = files_to_merge[:files_to_keep]
+        
+        print(f"SKIM MODE: Using {files_to_keep}/{total_files} files ({skim_percent}%)")
+        print(f"           Skipping {total_files - files_to_keep} files")
+    
     total_expected_events = len(input_files) * expected_events_per_file
     results['event_counts']['expected_total'] = total_expected_events
     results['event_counts']['input_files'] = len(input_files)
     results['event_counts']['non_empty_files'] = len(non_empty_files)
     results['event_counts']['empty_files'] = len(empty_files)
+    results['event_counts']['files_merged'] = len(files_to_merge)
     
     # Perform merge using Python-based merger (avoids hddm_merge_files momentum_double corruption bug)
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from hddm_merge_python import merge_hddm_files
-        print(f"Merging {len(non_empty_files)} HDDM files (Python merger)...")
-        total_events_written = merge_hddm_files(sorted(non_empty_files), output_file)
+        print(f"Merging {len(files_to_merge)} HDDM files (Python merger)...")
+        total_events_written = merge_hddm_files(sorted(files_to_merge), output_file)
         if total_events_written > 0:
             results['merge_successful'] = True
             results['event_counts']['output_actual'] = total_events_written

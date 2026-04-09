@@ -378,9 +378,14 @@ def check_hddm_precision(hddm_file, num_events=5, particle_type='ee'):
         }
 
 
-def process_individual_directory(config_data, config_path):
+def process_individual_directory(config_data, config_path, skim_percent=None):
     """
     Process a single directory (Level 1 config)
+    
+    Args:
+        config_data: Configuration dictionary
+        config_path: Path to configuration file
+        skim_percent: Optional percentage (0-100) of HDDM files to merge
     
     Args:
         config_data (dict): Individual directory configuration
@@ -530,6 +535,8 @@ def process_individual_directory(config_data, config_path):
             merged_hddm_file = existing_merged_file
         else:
             print(f"  Merging HDDM files to: {merged_hddm_file}")
+            if skim_percent is not None:
+                print(f"  NOTE: Skimming to {skim_percent}% of available files")
             
             merge_results = merge_and_validate_hddm(
                 input_dir=vectors_dir,
@@ -537,7 +544,8 @@ def process_individual_directory(config_data, config_path):
                 expected_events_per_file=expected_events_per_file,
                 pattern="vectors_*.hddm",
                 validate_before=True,
-                validate_after=False  # Python merger already reports event count at merge time
+                validate_after=False,  # Python merger already reports event count at merge time
+                skim_percent=skim_percent
             )
             
             if not merge_results['merge_successful']:
@@ -1207,13 +1215,14 @@ ANA_OS=CENTOS7"""
         traceback.print_exc()
         return False
 
-def process_run_period_master(config_data, config_path):
+def process_run_period_master(config_data, config_path, skim_percent=None):
     """
     Process run period master (Level 2 config)
     
     Args:
         config_data (dict): Run period master configuration
         config_path (str): Path to the configuration file
+        skim_percent (float): Optional percentage of HDDM files to merge
         
     Returns:
         dict: Processing results
@@ -1278,7 +1287,7 @@ def process_run_period_master(config_data, config_path):
         try:
             # Load and process individual config
             individual_data, _, _ = load_and_validate_config(individual_config_path)
-            individual_results = process_individual_directory(individual_data, individual_config_path)
+            individual_results = process_individual_directory(individual_data, individual_config_path, skim_percent=skim_percent)
             
             if individual_results['success']:
                 # Extract directory name more safely
@@ -1321,7 +1330,7 @@ def process_run_period_master(config_data, config_path):
     
     return results
 
-def process_ffs_master(config_data, config_path):
+def process_ffs_master(config_data, config_path, skim_percent=None):
     """
     Process FFS master (Level 3 config)
     
@@ -1378,7 +1387,7 @@ def process_ffs_master(config_data, config_path):
             # Process based on config level
             if config_level == 1:
                 # Individual config - process directly
-                dataset_results = process_individual_directory(dataset_config_data, dataset_config_path)
+                dataset_results = process_individual_directory(dataset_config_data, dataset_config_path, skim_percent=skim_percent)
                 if dataset_results['success']:
                     results['processed_datasets'].append({
                         'dataset_name': dataset_name,
@@ -1391,7 +1400,7 @@ def process_ffs_master(config_data, config_path):
                     results['success'] = False
             elif config_level == 2:
                 # Run period master - process as master
-                dataset_results = process_run_period_master(dataset_config_data, dataset_config_path)
+                dataset_results = process_run_period_master(dataset_config_data, dataset_config_path, skim_percent=skim_percent)
                 if dataset_results['success']:
                     results['processed_datasets'].append({
                         'dataset_name': dataset_name,
@@ -1572,6 +1581,9 @@ Examples:
   
   # Auto-merge histograms when done
   python prepareSimulation.py path/to/config.json --merge-histograms
+  
+  # Merge only 80% of HDDM files (useful for quick tests)
+  python prepareSimulation.py path/to/config.json --skim 80
         """
     )
     
@@ -1585,8 +1597,15 @@ Examples:
                        help='Automatically merge histograms after processing (no prompt)')
     parser.add_argument('--no-merge-prompt', action='store_true',
                        help='Skip histogram merge prompt (for unattended batch processing)')
+    parser.add_argument('--skim', type=float, metavar='PERCENT',
+                       help='Merge only PERCENT%% of HDDM files (e.g., --skim 80 merges 80%% of files)')
     
     args = parser.parse_args()
+    
+    # Validate skim percentage
+    if args.skim is not None:
+        if not (0 < args.skim <= 100):
+            parser.error(f"--skim must be between 0 and 100, got {args.skim}")
     
     # Load and validate configuration
     try:
@@ -1601,11 +1620,11 @@ Examples:
         
         # Route to appropriate processor
         if config_level == 1:
-            results = process_individual_directory(config_data, args.config)
+            results = process_individual_directory(config_data, args.config, skim_percent=args.skim)
         elif config_level == 2:
-            results = process_run_period_master(config_data, args.config)
+            results = process_run_period_master(config_data, args.config, skim_percent=args.skim)
         elif config_level == 3:
-            results = process_ffs_master(config_data, args.config)
+            results = process_ffs_master(config_data, args.config, skim_percent=args.skim)
         else:
             raise ValueError(f"Unknown configuration level: {config_level}")
         
