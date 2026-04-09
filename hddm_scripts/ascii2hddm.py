@@ -14,7 +14,7 @@ Examples:
   ascii2hddm.py ememem p triple_electron.txt output.hddm
   ascii2hddm.py mupmumpippim pb208 mixed.txt output.hddm
   ascii2hddm.py epem p input.txt output.hddm --run 30274
-  ascii2hddm.py pi0 p input.txt output.hddm --run 30274 --vertex '0 0 50 80'
+  ascii2hddm.py pi0 p input.txt output.hddm --run 30274 --vertex '0:0:50:80'
 
 The script automatically:
   - Parses the final state string into individual particles
@@ -172,16 +172,20 @@ def ascii2hddm(final_state_string, target_type, input_file, output_file,
     print(f"    Format: E_beam, {', '.join([f'{p}(E,px,py,pz)' for p in particles])}, recoil(E,px,py,pz)")
 
     # Vertex configuration
-    # Default: '0 0 0 0' tells downstream GlueX simulation (hdgeant4) to pull
+    # Default: '0:0:0:0' tells downstream GlueX simulation (hdgeant4) to pull
     # vertex information from the beam photon and target specifications for the run.
     # Non-zero values override with fixed vertex position (vx, vy) and z-range (zmin, zmax).
     # The z-position will be randomly sampled uniformly between zmin and zmax for each event.
     vx, vy, vz_min, vz_max = 0.0, 0.0, 0.0, 0.0
     if vertex is not None:
         try:
-            vx, vy, vz_min, vz_max = map(float, vertex.split())
+            # Auto-detect delimiter: prefer colon (shell-safe), but support spaces for backward compatibility
+            if ':' in vertex:
+                vx, vy, vz_min, vz_max = map(float, vertex.split(':'))
+            else:
+                vx, vy, vz_min, vz_max = map(float, vertex.split())
         except Exception:
-            print("Error parsing vertex. Format should be: 'x y zmin zmax'")
+            print("Error parsing vertex. Format should be: 'vx:vy:zmin:zmax' (colon-separated, preferred) or 'vx vy zmin zmax' (space-separated)")
             sys.exit(1)
 
     # Open output stream
@@ -416,9 +420,9 @@ The script automatically determines:
                         help="Run number (default: 0)")
     parser.add_argument("--vertex", 
                         type=str, 
-                        default="0 0 0 0",
-                        help="Vertex position as 'vx vy zmin zmax'. "
-                             "Default '0 0 0 0' tells hdgeant4 to use run-specific beam/target geometry. "
+                        default="0:0:0:0",
+                        help="Vertex position as 'vx:vy:zmin:zmax' (colon-separated, preferred) or 'vx vy zmin zmax' (space-separated). "
+                             "Default '0:0:0:0' tells hdgeant4 to use run-specific beam/target geometry. "
                              "Non-zero values specify fixed vertex (vx,vy) and z-range for uniform sampling.")
     parser.add_argument("--no-doubles", 
                         action="store_true",

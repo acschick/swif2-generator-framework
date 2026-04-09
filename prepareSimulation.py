@@ -35,6 +35,42 @@ except ImportError as e:
     print("Run 'gxenv' before running this script if HDDM tools are not available")
     sys.exit(1)
 
+import signal
+
+def input_with_timeout(prompt, timeout=120, default='n'):
+    """
+    Get user input with a timeout. If timeout expires, return default value.
+    
+    Args:
+        prompt (str): The prompt to display to the user
+        timeout (int): Timeout in seconds (default: 120 = 2 minutes)
+        default (str): Default value to return on timeout (default: 'n')
+    
+    Returns:
+        str: User input or default value on timeout
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Input timeout")
+    
+    # Set the signal handler and alarm
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout)
+    
+    try:
+        user_input = input(prompt).strip().lower()
+        signal.alarm(0)  # Cancel the alarm
+        return user_input
+    except TimeoutError:
+        signal.alarm(0)  # Cancel the alarm
+        print(f"\n⏱️  Input timeout ({timeout}s) - automatically answering '{default}'")
+        return default
+    except Exception as e:
+        signal.alarm(0)  # Cancel the alarm
+        raise e
+    finally:
+        # Restore the old signal handler
+        signal.signal(signal.SIGALRM, old_handler)
+
 def extract_config_value(config_data, field_paths, default=None):
     """
     Flexibly extract values from JSON config using multiple possible paths
@@ -253,11 +289,26 @@ def check_hddm_precision(hddm_file, num_events=5, particle_type='ee'):
                 pdg = product.pdgtype
                 momentum = product.getMomenta()[0]
                 
-                E = momentum.E
-                px = momentum.px
-                py = momentum.py
-                pz = momentum.pz
-                
+                # Prefer momentum_double (child of momentum) over float32
+                try:
+                    mom_doubles = momentum.getMomentum_doubles()
+                    if len(mom_doubles) > 0:
+                        md = mom_doubles[0]
+                        E  = md.E
+                        px = md.px
+                        py = md.py
+                        pz = md.pz
+                    else:
+                        E  = momentum.E
+                        px = momentum.px
+                        py = momentum.py
+                        pz = momentum.pz
+                except Exception:
+                    E  = momentum.E
+                    px = momentum.px
+                    py = momentum.py
+                    pz = momentum.pz
+
                 # Calculate mass: m² = E² - p²
                 p_squared = px**2 + py**2 + pz**2
                 m_squared = E**2 - p_squared
@@ -486,7 +537,7 @@ def process_individual_directory(config_data, config_path):
                 expected_events_per_file=expected_events_per_file,
                 pattern="vectors_*.hddm",
                 validate_before=True,
-                validate_after=True
+                validate_after=False  # Python merger already reports event count at merge time
             )
             
             if not merge_results['merge_successful']:
@@ -694,10 +745,11 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             ['rbhg_config.mcwrapper_settings', 'mcwrapper_settings'], {})
         
         # Get settings from JSON or use defaults
-        env_xml = mcw_settings.get('recon_env', '/group/halld/www/halldweb/html/halld_versions/version.xml')
+        env_xml = mcw_settings.get('recon_env', '')
         ana_env_xml = mcw_settings.get('analysis_env', '')
-        # Fallback: if environment XML not provided, use RunPeriods.json entry
-        if not env_xml:
+        sim_env_xml = mcw_settings.get('sim_env', '')
+        # Fill any missing env fields from RunPeriods.json for this run period
+        if not env_xml or not ana_env_xml or not sim_env_xml:
             try:
                 framework_home = extract_config_value(config_data,
                     ['rbhg_config.directory_paths.base_paths.framework_home', 'framework_home'], os.path.dirname(__file__))
@@ -705,12 +757,23 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
                 with open(runperiods_path, 'r') as rp_f:
                     rp_data = json.load(rp_f)
                 rp_entry = rp_data.get(str(run_period)) or rp_data.get('default') or {}
-                env_xml = rp_entry.get('recon_env', env_xml)
-                ana_env_xml = rp_entry.get('analysis_env', ana_env_xml)
-                if env_xml:
-                    print(f"    Fallback: using recon_env from RunPeriods.json: {env_xml}")
+                if not env_xml:
+                    env_xml = rp_entry.get('recon_env', '/group/halld/www/halldweb/html/halld_versions/version.xml')
+                    if env_xml:
+                        print(f"    Using recon_env from RunPeriods.json: {env_xml}")
+                if not ana_env_xml:
+                    ana_env_xml = rp_entry.get('analysis_env', '')
+                if not sim_env_xml:
+                    sim_env_xml = rp_entry.get('sim_env', '/group/halld/www/halldweb/html/halld_versions/version.xml')
             except Exception as e:
-                print(f"    WARNING: Could not read recon_env from RunPeriods.json: {e}")
+                print(f"    WARNING: Could not read env settings from RunPeriods.json: {e}")
+        if not env_xml:
+            env_xml = '/group/halld/www/halldweb/html/halld_versions/version.xml'
+        if not sim_env_xml:
+            sim_env_xml = '/group/halld/www/halldweb/html/halld_versions/version.xml'
+        
+        print(f"    [DEBUG] After fallback, sim_env_xml = '{sim_env_xml}'")
+        
         bkg = mcw_settings.get('background_version', 'NONE')
         rcdb_query = mcw_settings.get('rcdb_query', '')
         
@@ -894,6 +957,8 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         
         if gen_workflow_name and gen_workflow_name.startswith('gen_'):
             workflow_name = 'SIM_' + gen_workflow_name[4:]  # Replace 'gen_' with 'SIM_'
+            # Normalize BC nametag combinations: BC_FFN -> BCFFN, BC_FF1 -> BCFF1
+            workflow_name = workflow_name.replace('_BC_FF', '_BCFF')
         else:
             # Fallback construction if workflow name not found
             workflow_name = f"SIM_{gen_dir_name}" if gen_dir_name else "SIM_Unknown"
@@ -907,11 +972,21 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             ['rbhg_config.generation_info.nametag', 'nametag',
              'generation_info.nametag'], '')
         
+        form_factor = extract_config_value(config_data,
+            ['rbhg_config.physics_settings.form_factor', 'physics_settings.form_factor', 'form_factor'], '')
+        
         # Construct output directory path
-        # Format: /volatile/halld/home/{user}/RBHG/{study}/{nametag}/{gen_dir_name}/Simulation
-        # Example: /volatile/halld/home/acschick/RBHG/CobremTest/A3_FFN/1801_0DEG_DBLRAD_GlueX_ee_Berlin_v113/Simulation
+        # Format: /volatile/halld/home/{user}/RBHG/{study}/{nametag_formfactor}/{gen_dir_name}/Simulation
+        # For BC nametags, combine with form_factor without underscore (e.g., BC + FFN = BCFFN)
+        # For other nametags (like qDATAq), use as-is
         if nametag:
-            output_base_dir = f"/volatile/halld/home/{username}/RBHG/{study_name}/{nametag}/{gen_dir_name}/Simulation"
+            if nametag.upper() == "BC" and form_factor:
+                # Combine BC with form_factor (e.g., BCFFN, BCFF1)
+                nametag_dir = nametag + form_factor
+            else:
+                # Use nametag as-is (e.g., qDATAq)
+                nametag_dir = nametag
+            output_base_dir = f"/volatile/halld/home/{username}/RBHG/{study_name}/{nametag_dir}/{gen_dir_name}/Simulation"
         else:
             output_base_dir = f"/volatile/halld/home/{username}/RBHG/{study_name}/{gen_dir_name}/Simulation"
         
@@ -936,8 +1011,8 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             sed_option = '-i' if os_type == "Linux" else '-i ""'
             
             for placeholder, replacement in replacements_dict.items():
-                # Escape special characters for sed
-                escaped_replacement = replacement.replace('/', '\\/')
+                # Escape special characters for sed (using | as delimiter, so escape | not /)
+                escaped_replacement = replacement.replace('|', '\\|')
                 cmd = f"sed {sed_option} 's|{placeholder}|{escaped_replacement}|g' {file_path}"
                 try:
                     subprocess.run(cmd, shell=True, check=True, capture_output=True)
@@ -1011,12 +1086,15 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             if batch_system == 'swif2cont':
                 container_os_lines = """GENERATOR_OS=LOCAL
 POSTGEN_OS=LOCAL
-SIMULATION_OS=CENTOS7
-MCSMEAR_OS=CENTOS7
+SIMULATION_OS=LOCAL
+MCSMEAR_OS=LOCAL
 RECON_OS=CENTOS7
 ANA_OS=CENTOS7"""
             else:
                 container_os_lines = ""
+            
+            print(f"    [DEBUG] Before mc_replacements, sim_env_xml = '{sim_env_xml}'")
+            print(f"    [DEBUG] Replacement will be: '{f'SIM_ENVIRONMENT_FILE={sim_env_xml}' if sim_env_xml else ''}'")
             
             mc_replacements = {
                 'RBHGWORKFLOWNAME': workflow_name,
@@ -1025,6 +1103,7 @@ ANA_OS=CENTOS7"""
                 'RBHGINCLUDEBACKGROUND': bkg,
                 'RBHG_RECON_ENVIRONMENT': environment_file_path,
                 'RBHG_ANALYSIS_ENVIRONMENT': f'ANA_ENVIRONMENT_FILE={ana_env_xml}' if ana_env_xml else '',
+                'RBHG_SIM_ENVIRONMENT': f'SIM_ENVIRONMENT_FILE={sim_env_xml}' if sim_env_xml else '',
                 'RBHG_RCDBQUERY': rcdb_query,
                 'RBHG_JANACONFIGFILE': jana_config_dest,
                 'RBHG_EXPERIMENT': experiment_type,
@@ -1087,8 +1166,9 @@ ANA_OS=CENTOS7"""
                 generator_type = extract_config_value(config_data, ['rbhg_config.directory_paths.base_paths.generator_type'], 'RBHG')
                 farm_out_base = f"/farm_out/{username}/{generator_type}/{study_name}"
 
-            # Log dir should point to simulation logs under farm_out
-            logdir = os.path.join(farm_out_base, 'simulation')
+            # Log dir should be unique per workflow to avoid log file conflicts
+            # Use workflow_name as the subdirectory (e.g., /farm_out/acschick/RBHG/FFS1/SIM_FFS1_BCFFN_1801_0DEG_ee/)
+            logdir = os.path.join(farm_out_base, workflow_name)
             # Ensure trailing slash for readability in configs
             if not logdir.endswith('/'):
                 logdir = logdir + '/'
@@ -1399,24 +1479,25 @@ def prompt_histogram_merging(config_data, config_path, auto_merge=False, skip_pr
         print("\n--merge-histograms flag detected: automatically merging histograms")
         response = 'y'
     else:
-        response = input("\nWould you like to merge histograms now? (y/n): ").strip().lower()
+        print("\n⏱️  You have 2 minutes to respond (timeout will auto-answer 'n')...")
+        response = input_with_timeout("\nWould you like to merge histograms now? (y/n): ", timeout=120, default='n')
     
     if response == 'y':
-        # Try to find hists directory from config
+        # Determine config level so we can find hists dirs appropriately
         hists_dir = None
-        
-        # Try to extract the base directory from vectors path
-        vectors_dir = extract_config_value(config_data,
-            ['rbhg_config.directory_paths.rbhg_generation.vectors_hddm_directory',
-             'vectors_hddm_directory', 'directory_paths.rbhg_generation.vectors_hddm_directory'])
-        
-        if vectors_dir:
-            # hists/ is typically a sibling to vectors/
-            base_dir = os.path.dirname(vectors_dir)
-            potential_hists_dir = os.path.join(base_dir, 'hists')
-            if os.path.exists(potential_hists_dir):
+        _, cfg_type, cfg_level = load_and_validate_config(config_path)
+
+        if cfg_level == 1:
+            # Individual config: hists/ is a sibling of the config file itself
+            base_dir = os.path.dirname(os.path.abspath(config_path))
+            if os.path.exists(os.path.join(base_dir, 'hists')):
                 hists_dir = base_dir
-        
+        else:
+            # Level 2/3 master config: hists dirs are spread across many subdirs.
+            # Use the directory containing the master config as the search root for
+            # merge_all_histograms.py (correct behaviour — don't try single-dir merge).
+            hists_dir = None   # will fall through to the multi-dir message below
+
         if hists_dir:
             print(f"\nFound hists directory at: {hists_dir}/hists/")
             
@@ -1452,10 +1533,13 @@ def prompt_histogram_merging(config_data, config_path, auto_merge=False, skip_pr
                     print("\nYou can merge histograms manually by running:")
                     print(f"  python generators/RBHG/histogram_scripts/mergeHists.py")
         else:
-            print("\nCould not automatically locate hists directory.")
-            print("You can merge histograms using:")
-            print("  ./merge_all_histograms.py output/RBHG/<study>/ --interactive")
-            print("Or manually with:")
+            # Multi-dataset config: give them the exact path to run merge_all_histograms.py on
+            master_dir = os.path.dirname(os.path.abspath(config_path))
+            print("\nMultiple hists/ directories detected (multi-dataset config).")
+            print("Merge all at once with:")
+            print(f"  ./merge_all_histograms.py {master_dir} --interactive")
+            print(f"  ./merge_all_histograms.py {master_dir} --farm")
+            print("Or for a single directory:")
             print("  generators/RBHG/histogram_scripts/mergeHists.py")
     else:
         print("\nSkipping histogram merging.")

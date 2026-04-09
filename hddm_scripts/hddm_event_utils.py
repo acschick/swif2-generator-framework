@@ -250,24 +250,20 @@ def merge_and_validate_hddm(input_dir, output_file, expected_events_per_file=500
     results['event_counts']['non_empty_files'] = len(non_empty_files)
     results['event_counts']['empty_files'] = len(empty_files)
     
-    # Perform merge using hddm_merge_files
+    # Perform merge using Python-based merger (avoids hddm_merge_files momentum_double corruption bug)
     try:
-        import subprocess
-        # Note: hddm_merge_files uses -oOutputfile (no space!)
-        cmd = ["hddm_merge_files", f"-o{output_file}"] + sorted(non_empty_files)
-        print(f"Merging {len(non_empty_files)} HDDM files...")
-        print(f"Command: hddm_merge_files -o{os.path.basename(output_file)} [... {len(non_empty_files)} files]")
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=input_dir)
-        
-        if result.returncode == 0:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from hddm_merge_python import merge_hddm_files
+        print(f"Merging {len(non_empty_files)} HDDM files (Python merger)...")
+        total_events_written = merge_hddm_files(sorted(non_empty_files), output_file)
+        if total_events_written > 0:
             results['merge_successful'] = True
-            print(f"Merge completed successfully: {output_file}")
+            results['event_counts']['output_actual'] = total_events_written
+            results['validation_passed'] = True
+            print(f"Merge completed successfully: {output_file} ({total_events_written:,} events)")
         else:
-            print(f"Merge failed with return code {result.returncode}")
-            print(f"STDERR: {result.stderr}")
+            print(f"Merge failed: 0 events written")
             return results
-            
     except Exception as e:
         print(f"ERROR during merge: {e}")
         return results

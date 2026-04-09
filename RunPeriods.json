@@ -56,6 +56,7 @@
     "TPOL_run_range": "41000 - 42559",
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2018_01-ver02_32.xml",
     "analysis_env": "/group/halld/www/halldweb/html/halld_versions/analysis-2018_01-ver18.xml",
+    "sim_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "background_version": "Random:recon-2018_01-ver02.2",
     "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg})",
     "batch_system": "swif2cont",
@@ -102,6 +103,7 @@
     "low_energy_run_range": "51384 - 51457",
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/recon-2018_08-ver02_31.xml",
     "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version_4.20.0.xml",
+    "sim_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "background_version": "Random:recon-2018_08-ver02.2",
     "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg}) and beam_on_current>49",
     "batch_system": "swif2cont",
@@ -146,7 +148,7 @@
     "run_range": "100531-101622",
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
-    "background_version": "recon-2022_05-ver01.4",
+    "background_version": "Random:recon-2022_05-ver01.4",
     "batch_system": "swif2",
     "jana_epem_ReaFil_config": "jana_CPPlaunch1_epem.config",
     "jana_mupmum_ReaFil_config": "jana_CPPlaunch1_mupmum.config",
@@ -154,17 +156,17 @@
       "135DEG": {
         "characteristic_run": 101582,
         "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101582_135deg_rcdb.dat",
-        "epem_event_count": "40000000"
+        "epem_event_count": "4000000"
       },
       "45DEG": {
         "characteristic_run": 101586,
         "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101586_45deg_rcdb.dat",
-        "epem_event_count": "40000000"
+        "epem_event_count": "4000000"
       },
       "AMO": {
         "characteristic_run": 101615,
         "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101615_AMO_rcdb.dat",
-        "epem_event_count": "40000000"
+        "epem_event_count": "4000000"
       }
     }
   }

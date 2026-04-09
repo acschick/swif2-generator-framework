@@ -1,29 +1,50 @@
 #!/usr/bin/env python3
 """
-Verify masses in HDDM file by calculating from stored 4-momentum
+Verify masses in HDDM file by calculating from stored 4-momentum.
+Uses momentum_double (double precision) if available, falls back to float32.
+
+Usage: python3 verify_masses.py <hddm_file> [--events N]
 """
 import hddm_s
 import sys
 import numpy as np
 
-if len(sys.argv) != 2:
-    print("Usage: python3 verify_masses.py <hddm_file>")
+# Parse args
+hddm_file = None
+max_events = None  # None = all events
+args = sys.argv[1:]
+while args:
+    a = args.pop(0)
+    if a == '--events' and args:
+        max_events = int(args.pop(0))
+    elif not hddm_file:
+        hddm_file = a
+
+if not hddm_file:
+    print("Usage: python3 verify_masses.py <hddm_file> [--events N]")
     sys.exit(1)
 
-hddm_file = sys.argv[1]
-
 print(f"Checking masses in {hddm_file}...")
+if max_events:
+    print(f"(limiting to first {max_events} events)")
 print()
 
 electron_mass = 0.000510999  # GeV
-proton_mass = 0.93827208     # GeV
+muon_mass     = 0.105658389  # GeV
+proton_mass   = 0.93827208   # GeV
 
 em_masses = []
 ep_masses = []
+mup_masses = []
+mum_masses = []
 recoil_masses = []
 
+using_doubles = None
+
 # Read events
-for rec in hddm_s.istream(hddm_file):
+for event_num, rec in enumerate(hddm_s.istream(hddm_file)):
+    if max_events is not None and event_num >= max_events:
+        break
     physicsEvent = rec.getPhysicsEvents()[0]
     reaction = physicsEvent.getReactions()[0]
     vertex = reaction.getVertices()[0]
@@ -32,11 +53,24 @@ for rec in hddm_s.istream(hddm_file):
     for product in products:
         pdg = product.pdgtype
         momentum = product.getMomenta()[0]
-        
-        E = momentum.E
-        px = momentum.px
-        py = momentum.py
-        pz = momentum.pz
+
+        # Prefer momentum_double over float32
+        mom_doubles = momentum.getMomentum_doubles()
+        if len(mom_doubles) > 0:
+            md = mom_doubles[0]
+            E  = md.E
+            px = md.px
+            py = md.py
+            pz = md.pz
+            if using_doubles is None:
+                using_doubles = True
+        else:
+            E  = momentum.E
+            px = momentum.px
+            py = momentum.py
+            pz = momentum.pz
+            if using_doubles is None:
+                using_doubles = False
         
         # Calculate mass: m² = E² - p²
         p_squared = px**2 + py**2 + pz**2
@@ -49,48 +83,33 @@ for rec in hddm_s.istream(hddm_file):
         
         mass_mev = mass * 1000  # Convert to MeV
         
-        if pdg == 11:  # electron
-            em_masses.append(mass_mev)
-        elif pdg == -11:  # positron
-            ep_masses.append(mass_mev)
-        elif pdg == 2212:  # proton
-            recoil_masses.append(mass_mev)
+        if pdg == 11:   em_masses.append(mass_mev)
+        elif pdg == -11:  ep_masses.append(mass_mev)
+        elif pdg == 13:   mum_masses.append(mass_mev)
+        elif pdg == -13:  mup_masses.append(mass_mev)
+        elif pdg == 2212: recoil_masses.append(mass_mev)
 
 # Statistics
-print(f"Analyzed {len(em_masses)} events")
+n_events = event_num + 1 if 'event_num' in dir() else 0
+print(f"Analyzed {n_events} events")
+prec_src = 'momentum_double (double)' if using_doubles else 'standard momentum (float32) -- doubles not found!'
+print(f"Precision source: {prec_src}")
 print()
 
-if em_masses:
-    em_arr = np.array(em_masses)
-    print(f"Electron (e-) masses:")
-    print(f"  Expected: {electron_mass * 1000:.6f} MeV")
-    print(f"  Mean:     {np.mean(em_arr):.6f} MeV")
-    print(f"  Std dev:  {np.std(em_arr):.6f} MeV")
-    print(f"  Min:      {np.min(em_arr):.6f} MeV")
-    print(f"  Max:      {np.max(em_arr):.6f} MeV")
-    errors = em_arr - electron_mass * 1000
-    print(f"  Error range: {np.min(errors):.6f} to {np.max(errors):.6f} MeV")
+def print_stats(label, masses, expected_mev):
+    if not masses:
+        return
+    arr = np.array(masses)
+    errors = arr - expected_mev
+    print(f"{label}:")
+    print(f"  Expected: {expected_mev:.6f} MeV")
+    print(f"  Mean:     {np.mean(arr):.6f} MeV  (error: {np.mean(errors):+.6f} MeV)")
+    print(f"  Std dev:  {np.std(arr):.6f} MeV")
+    print(f"  Error range: {np.min(errors):+.6f} to {np.max(errors):+.6f} MeV")
     print()
 
-if ep_masses:
-    ep_arr = np.array(ep_masses)
-    print(f"Positron (e+) masses:")
-    print(f"  Expected: {electron_mass * 1000:.6f} MeV")
-    print(f"  Mean:     {np.mean(ep_arr):.6f} MeV")
-    print(f"  Std dev:  {np.std(ep_arr):.6f} MeV")
-    print(f"  Min:      {np.min(ep_arr):.6f} MeV")
-    print(f"  Max:      {np.max(ep_arr):.6f} MeV")
-    errors = ep_arr - electron_mass * 1000
-    print(f"  Error range: {np.min(errors):.6f} to {np.max(errors):.6f} MeV")
-    print()
-
-if recoil_masses:
-    rec_arr = np.array(recoil_masses)
-    print(f"Recoil proton masses:")
-    print(f"  Expected: {proton_mass * 1000:.6f} MeV")
-    print(f"  Mean:     {np.mean(rec_arr):.6f} MeV")
-    print(f"  Std dev:  {np.std(rec_arr):.6f} MeV")
-    print(f"  Min:      {np.min(rec_arr):.6f} MeV")
-    print(f"  Max:      {np.max(rec_arr):.6f} MeV")
-    errors = rec_arr - proton_mass * 1000
-    print(f"  Error range: {np.min(errors):.6f} to {np.max(errors):.6f} MeV")
+print_stats("Electron (e-, PDG 11)",  em_masses,  electron_mass * 1000)
+print_stats("Positron (e+, PDG -11)", ep_masses,  electron_mass * 1000)
+print_stats("Muon- (PDG 13)",         mum_masses, muon_mass     * 1000)
+print_stats("Muon+ (PDG -13)",        mup_masses, muon_mass     * 1000)
+print_stats("Recoil proton",          recoil_masses, proton_mass * 1000)

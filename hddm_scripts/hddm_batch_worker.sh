@@ -18,8 +18,6 @@
 #       vectors_0.txt vectors_0.hddm vectors_1.txt vectors_1.hddm ...
 # =============================================================================
 
-set -u
-
 # --- Environment setup ---
 ENVFILE="$1"
 source /group/halld/Software/build_scripts/gluex_env_jlab.sh "$ENVFILE"
@@ -35,9 +33,10 @@ shift 5   # remaining args: optional --vertex, then alternating txt/hddm pairs
 VERTEX_ARGS=()
 if [[ "${1:-}" == "--vertex" ]]; then
     shift   # consume --vertex
-    # consume exactly 4 values: vx vy zmin zmax
-    VERTEX_ARGS=("--vertex" "$1" "$2" "$3" "$4")
-    shift 4
+    # vertex is a single string: 'vx vy zmin zmax' (shell-quoted by submit script,
+    # quotes already stripped by the shell before this script runs, so $1 is e.g. "0 0 1 1.02806")
+    VERTEX_ARGS=("--vertex" "$1")
+    shift 1
 fi
 
 TOTAL=0

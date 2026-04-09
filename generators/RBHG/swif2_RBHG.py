@@ -282,6 +282,7 @@ if Experiment.upper() == "CPP":
 #### MCWrapper / Simulation Control ####
 MCWrapper_ReconEnv = get_config("MCWRAPPER_RECON_ENV_OVERRIDE", "")        # Override recon environment (blank = use RunPeriods.json default)
 MCWrapper_AnalysisEnv = get_config("MCWRAPPER_ANALYSIS_ENV_OVERRIDE", "")  # Override analysis environment (blank = use RunPeriods.json default)
+MCWrapper_SimEnv = get_config("MCWRAPPER_SIM_ENV_OVERRIDE", "")            # Override MCSmear/simulation environment XML (blank = use RunPeriods.json default)
 MCWrapper_BackgroundVersion = get_config("MCWRAPPER_BACKGROUND_VERSION", "") # Override background version (blank = use RunPeriods.json default)
 MCWrapper_JanaConfig = get_config("MCWRAPPER_JANA_CONFIG_OVERRIDE", "")    # Override JANA config (blank = use RunPeriods.json default)
 MCWrapper_RCDBQuery = get_config("MCWRAPPER_RCDB_QUERY", "")               # Override RCDB query (blank = auto-generate from RunPeriods.json)
@@ -401,6 +402,7 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
             mcwrapper_settings = {
                 "recon_env": MCWrapper_ReconEnv if MCWrapper_ReconEnv.strip() else rp_data.get("recon_env", ""),
                 "analysis_env": MCWrapper_AnalysisEnv if MCWrapper_AnalysisEnv.strip() else rp_data.get("analysis_env", ""),
+                "sim_env": MCWrapper_SimEnv if MCWrapper_SimEnv.strip() else rp_data.get("sim_env", ""),
                 "background_version": MCWrapper_BackgroundVersion if MCWrapper_BackgroundVersion.strip() else rp_data.get("background_version", ""),
                 "jana_config": MCWrapper_JanaConfig if MCWrapper_JanaConfig.strip() else rp_data.get("jana_epem_config", ""),
                 "batch_system": rp_data.get("batch_system", "swif2"),
@@ -523,6 +525,11 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
             }
         }
     
+    # Workflow name components — computed here so they're available in the config dict
+    # wf_pol_str: AMO stays as-is; numeric angles get "DEG" suffix (e.g. "135" -> "135DEG")
+    wf_pol_str = PolDeg if str(PolDeg).upper() == "AMO" else f"{PolDeg}DEG"
+    wf_rad_mode = get_radiation_mode(internal_radiation, single_radiation, hypgeom_radiation)
+
     config = {
         "rbhg_config": {
             "version": "1.0",
@@ -588,11 +595,11 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
                     "analysis_hists": f"analysis_hists/{f'{study_name}_{nametag}_{form_factor}_{PolDeg}DEG_{lepton}'}" if directories else None
                 },
                 "swif2_workflow_names": {
-                    "generation": f"gen_{study_name}_{nametag}_{form_factor}_{run_period}_{PolDeg}DEG_{lepton}" if directories else None,
-                    "simulation": f"sim_{study_name}_{nametag}_{form_factor}_{run_period}_{PolDeg}DEG_{lepton}" if directories else None,
-                    "dselector": f"dsel_{study_name}_{nametag}_{form_factor}_{run_period}_{PolDeg}DEG_{lepton}" if directories else None,
-                    "tmva": f"tmva_{study_name}_{nametag}_{form_factor}_{run_period}_{PolDeg}DEG_{lepton}" if directories else None,
-                    "analysis_hists": f"hist_{study_name}_{nametag}_{form_factor}_{run_period}_{PolDeg}DEG_{lepton}" if directories else None
+                    "generation": f"gen_{study_name}_{nametag}_{form_factor}_{run_period}_{wf_pol_str}_{wf_rad_mode}_{lepton}" if directories else None,
+                    "simulation": f"sim_{study_name}_{nametag}_{form_factor}_{run_period}_{wf_pol_str}_{wf_rad_mode}_{lepton}" if directories else None,
+                    "dselector": f"dsel_{study_name}_{nametag}_{form_factor}_{run_period}_{wf_pol_str}_{wf_rad_mode}_{lepton}" if directories else None,
+                    "tmva": f"tmva_{study_name}_{nametag}_{form_factor}_{run_period}_{wf_pol_str}_{wf_rad_mode}_{lepton}" if directories else None,
+                    "analysis_hists": f"hist_{study_name}_{nametag}_{form_factor}_{run_period}_{wf_pol_str}_{wf_rad_mode}_{lepton}" if directories else None
                 },
                 "templates": {
                     "rbhg_template_directory": directories['template_directory'] if directories else None,
@@ -859,6 +866,7 @@ def load_runperiods_data(run_period, polarization, rbhg_home_dir):
             "total_triggers": pol_data.get("total_triggers", ""),
             "recon_env": period_data.get("recon_env", ""),
             "analysis_env": period_data.get("analysis_env", ""),
+            "sim_env": period_data.get("sim_env", ""),
             "background_version": period_data.get("background_version", ""),
             "jana_epem_config": period_data.get("jana_epem_config", ""),
             "RCDB_query": period_data.get("RCDB_query", ""),

@@ -66,11 +66,11 @@ LEPTON_TO_PARTICLE = {
     "mu": "mupmum",
 }
 
-# Vertex string passed to ascii2hddm.py --vertex vx vy zmin zmax.
-# "0 0 0 0" means "omit the flag entirely" (let hdgeant4 pull from CCDB).
+# Vertex string passed to ascii2hddm.py --vertex vx:vy:zmin:zmax (colon-separated, no spaces).
+# "0:0:0:0" means "omit the flag entirely" (let hdgeant4 pull from CCDB).
 EXPERIMENT_TO_VERTEX = {
-    "CPP":   "0 0 1 1.02806",   # lead-foil target in Hall D
-    "GlueX": "0 0 0 0",         # hydrogen / CCDB default
+    "CPP":   "0:0:1:1.02806",   # lead-foil target in Hall D
+    "GlueX": "0:0:0:0",         # hydrogen / CCDB default
 }
 
 
@@ -132,8 +132,8 @@ def submit_job(workflow, job_name, logdir, worker_script, env_file, ascii2hddm,
     #         [--vertex vx vy zmin zmax]  txt_0 hddm_0  txt_1 hddm_1 ...
     cmd += ["bash", worker_script, env_file, ascii2hddm, particle, target, str(run_number)]
 
-    if vertex and vertex.strip() != "0 0 0 0":
-        cmd += ["--vertex"] + vertex.split()
+    if vertex and vertex.strip() != "0:0:0:0":
+        cmd += ["--vertex", vertex]
 
     for txt, hddm in zip(txt_files, hddm_files):
         cmd += [txt, hddm]
@@ -242,7 +242,7 @@ def load_dataset_info(config_path):
         "total_jobs":  int(total_jobs),
         "experiment":  experiment,
         "lepton_type": lepton_type,
-        "vertex":      EXPERIMENT_TO_VERTEX.get(experiment, "0 0 0 0"),
+        "vertex":      EXPERIMENT_TO_VERTEX.get(experiment, "0:0:0:0"),
     }
 
 
