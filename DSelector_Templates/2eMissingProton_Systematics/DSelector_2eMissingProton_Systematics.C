@@ -1,5 +1,6 @@
 #include "DSelector_2eMissingProton_Systematics.h"
 #include "TMath.h"
+#include "TLeaf.h"
 
 #include <cctype>
 
@@ -123,6 +124,19 @@ void DSelector_2eMissingProton_Systematics::Init(TTree *locTree)
 	dPreviousRunNumber = 0;
 	dIsCPPRunPeriod = false;
 	dRunPeriodIndex = -1;
+	dBookCPPBeamRegions = false;
+	dNumActiveBeamRegions = kNumBeamRegions;
+	if(locTree != NULL && locTree->GetEntries() > 0) {
+		TLeaf* runNumberLeaf = locTree->GetLeaf("RunNumber");
+		if(runNumberLeaf != NULL) {
+			Long64_t previousReadEntry = locTree->GetReadEntry();
+			locTree->GetEntry(0);
+			const UInt_t firstRunNumber = static_cast<UInt_t>(runNumberLeaf->GetValue());
+			dBookCPPBeamRegions = (firstRunNumber >= 100531 && firstRunNumber <= 102000); // CPP nominal range ends at 101622
+			if(previousReadEntry >= 0)
+				locTree->GetEntry(previousReadEntry);
+		}
+	}
 
 	/*********************************** EXAMPLE USER INITIALIZATION: ANALYSIS ACTIONS **********************************/
 
@@ -941,8 +955,8 @@ void DSelector_2eMissingProton_Systematics::Init(TTree *locTree)
 	// Keep this directly below the GlueX block so both experiment definitions
 	// are edited in one obvious place.
 	dAnalysisCutConditionsCPP = dAnalysisCutConditions;
-	dAnalysisCutConditionsCPP.minBeamE = 5.35;
-	dAnalysisCutConditionsCPP.maxBeamE = 5.75;
+	dAnalysisCutConditionsCPP.minBeamE = 3.0;
+	dAnalysisCutConditionsCPP.maxBeamE = 11.0;
 	dAnalysisCutConditionsCPP.minTheta = 1.1;
 	dAnalysisCutConditionsCPP.apply2DThetaCut = false;
 	dAnalysisCutConditionsCPP.minWkin = 0.0;
@@ -1077,7 +1091,7 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 	UInt_t locRunNumber = Get_RunNumber();
 	if(locRunNumber != dPreviousRunNumber)
 	{
-		dIsCPPRunPeriod = (locRunNumber >= 100531 && locRunNumber <= 101622);
+		dIsCPPRunPeriod = (locRunNumber >= 100531 && locRunNumber <= 102000); // CPP nominal range ends at 101622
 		if(locRunNumber >= 40856 && locRunNumber <= 42550)
 			dRunPeriodIndex = 0; // 1801 official range
 		else if(locRunNumber >= 50685 && locRunNumber <= 51768)
@@ -1771,8 +1785,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 			rawFullSpectrumCuts.applyBestChiSqComboCut = false;
 			rawFullSpectrumCuts.applyMVACuts = false;
 			if (dIsCPPRunPeriod) {
-				rawFullSpectrumCuts.minBeamE = 4.0;
-				rawFullSpectrumCuts.maxBeamE = 7.6;
+				rawFullSpectrumCuts.minBeamE = 3.0;
+				rawFullSpectrumCuts.maxBeamE = 11.0;
 			} else {
 				rawFullSpectrumCuts.minBeamE = 7.0;
 				rawFullSpectrumCuts.maxBeamE = 11.4;
@@ -1824,8 +1838,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				CutConditions fullSpectrumCuts = activeFiducialConditions;
 				fullSpectrumCuts.applyMVACuts = false;  // Turn off MVA cuts for MC thrown histograms
 				if (dIsCPPRunPeriod) {
-					fullSpectrumCuts.minBeamE = 4.0;
-					fullSpectrumCuts.maxBeamE = 7.6;
+					fullSpectrumCuts.minBeamE = 3.0;
+					fullSpectrumCuts.maxBeamE = 11.0;
 				} else {
 					fullSpectrumCuts.minBeamE = 7.0;
 					fullSpectrumCuts.maxBeamE = 11.4;
@@ -1951,8 +1965,13 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				fcalDiagnosticCuts.applyMaxThetaCut = false;
 				fcalDiagnosticCuts.apply2DThetaCut = false;
 				fcalDiagnosticCuts.applyMomentumRangeCut = false;
-				fcalDiagnosticCuts.minBeamE = 7.0;  // Full spectrum
-				fcalDiagnosticCuts.maxBeamE = 11.4; // Full spectrum
+				if (dIsCPPRunPeriod) {
+					fcalDiagnosticCuts.minBeamE = 3.0;  // CPP full spectrum
+					fcalDiagnosticCuts.maxBeamE = 11.0; // CPP full spectrum
+				} else {
+					fcalDiagnosticCuts.minBeamE = 7.0;  // GlueX-I full spectrum
+					fcalDiagnosticCuts.maxBeamE = 11.4; // GlueX-I full spectrum
+				}
 				// cout << "DEBUG 5.3.20: About to assign modelChoice" << endl;
 				fcalDiagnosticCuts.modelChoice = "MLP";
 				// cout << "DEBUG 5.3.21: About to assign particleChoice" << endl;
@@ -2056,8 +2075,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				CutConditions fullSpectrumCuts = activeFiducialConditions;
 				fullSpectrumCuts.applyMVACuts = false;  // Turn off MVA cuts for diagnostic histograms
 				if (dIsCPPRunPeriod) {
-					fullSpectrumCuts.minBeamE = 4.0;
-					fullSpectrumCuts.maxBeamE = 7.6;
+					fullSpectrumCuts.minBeamE = 3.0;
+					fullSpectrumCuts.maxBeamE = 11.0;
 				} else {
 					fullSpectrumCuts.minBeamE = 7.0;
 					fullSpectrumCuts.maxBeamE = 11.4;
@@ -2455,8 +2474,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				// Fill Full Spectrum N-1 histograms
 				CutConditions fullSpectrumCuts = activeFiducialConditions;
 				if (dIsCPPRunPeriod) {
-					fullSpectrumCuts.minBeamE = 4.0;
-					fullSpectrumCuts.maxBeamE = 7.6;
+					fullSpectrumCuts.minBeamE = 3.0;
+					fullSpectrumCuts.maxBeamE = 11.0;
 				} else {
 					fullSpectrumCuts.minBeamE = 7.0;
 					fullSpectrumCuts.maxBeamE = 11.4;
@@ -2551,15 +2570,22 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 		dMinAngles[i] = minAngles[i];
 	}
 
-	const double beamEnergyRegions[kNumBeamRegions][2] = {
+	const double gluexBeamEnergyRegions[kNumBeamRegions][2] = {
 		{7.8, 8.0}, {8.0, 8.2}, {8.2, 8.4}, {8.4, 8.6},
 		{8.6, 8.8}, {8.8, 9.0}, {9.0, 9.2}, {9.2, 9.4},
 		{9.4, 9.6}, {9.6, 9.8}, {9.8, 10.0}, {10.0, 10.2},
 		{10.2, 10.4}, {10.4, 10.6}, {10.6, 10.8}, {10.8, 11.0}
 	};
-	for (int i = 0; i < kNumBeamRegions; ++i) {
-		dBeamEnergyRegions[i][0] = beamEnergyRegions[i][0];
-		dBeamEnergyRegions[i][1] = beamEnergyRegions[i][1];
+	const int numCPPBeamRegions = 11;
+	const double cppBeamEnergyRegions[numCPPBeamRegions][2] = {
+		{4.95, 5.05}, {5.05, 5.15}, {5.15, 5.25}, {5.25, 5.35},
+		{5.35, 5.45}, {5.45, 5.55}, {5.55, 5.65}, {5.65, 5.75},
+		{5.75, 5.85}, {5.85, 5.95}, {5.95, 6.05}
+	};
+	dNumActiveBeamRegions = dBookCPPBeamRegions ? numCPPBeamRegions : kNumBeamRegions;
+	for (int i = 0; i < dNumActiveBeamRegions; ++i) {
+		dBeamEnergyRegions[i][0] = dBookCPPBeamRegions ? cppBeamEnergyRegions[i][0] : gluexBeamEnergyRegions[i][0];
+		dBeamEnergyRegions[i][1] = dBookCPPBeamRegions ? cppBeamEnergyRegions[i][1] : gluexBeamEnergyRegions[i][1];
 	}
 
 	const double massRegions[kNumMassRegions][2] = {
@@ -2688,7 +2714,7 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 
 	for (int i = 0; i < kNumMethods; i++) {
 		for (int j = 0; j < kNumPid; j++) {
-			for (int k = 0; k < kNumBeamRegions; k++) {
+			for (int k = 0; k < dNumActiveBeamRegions; k++) {
 				phiJTDir->cd();
 				dHist_JTphi_BeamRegions[i][j][k] = new TH1D(
 					Form("JTphi_%s_%s_beamRegion_%.3f_%.3f", dMethods[i], dPidChoices[j],
@@ -3164,8 +3190,8 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 
 	auto setQ2BeamWindow = [&](CutConditions& conditions) {
 		if(dIsCPPRunPeriod) {
-			conditions.minBeamE = 4.0;
-			conditions.maxBeamE = 7.6;
+			conditions.minBeamE = 3.0;
+			conditions.maxBeamE = 11.0;
 		} else {
 			conditions.minBeamE = 7.0;
 			conditions.maxBeamE = 11.4;
@@ -3287,7 +3313,7 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 			}
 			conditions.minWkin = activeFiducialConditions.minWkin;
 
-			for (int k = 0; k < kNumBeamRegions; k++) {
+			for (int k = 0; k < dNumActiveBeamRegions; k++) {
 				conditions.minBeamE = dBeamEnergyRegions[k][0];
 				conditions.maxBeamE = dBeamEnergyRegions[k][1];
 				if (ComboPassesCuts(inputs, conditions)) {
@@ -3449,9 +3475,9 @@ int DSelector_2eMissingProton_Systematics::GetBeamWindowIndex(double beamE)
 	double fullSpectrumMin, fullSpectrumMax, coherentPeakMin, coherentPeakMax;
 	
 	if (dIsCPPRunPeriod) {
-		// CPP (Lead target): Runs 110621-112001
-		fullSpectrumMin = 4.0;
-		fullSpectrumMax = 7.6;
+		// CPP (Lead target): nominal runs 100531-101622
+		fullSpectrumMin = 3.0;
+		fullSpectrumMax = 11.0;
 		coherentPeakMin = 5.35;
 		coherentPeakMax = 5.75;
 	} else {
@@ -3582,7 +3608,7 @@ static TString BuildStructuredTagFromTokens(TObjArray* tokens)
 			runPeriod = "1801";
 		else if(runNum >= 50685 && runNum <= 51768)
 			runPeriod = "1808";
-		else if(runNum >= 110621 && runNum <= 112001)
+		else if(runNum >= 100531 && runNum <= 102000)
 			runPeriod = "CPP";
 	}
 
