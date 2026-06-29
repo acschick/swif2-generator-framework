@@ -160,7 +160,7 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 
 		// BEAM POLARIZATION INFORMATION
 		UInt_t dPreviousRunNumber;
-		bool dIsCPPRunPeriod;  // true for CPP run period (110621-112001), false for GlueX-I
+		bool dIsCPPRunPeriod;  // true for CPP run period (100531-101622), false for GlueX-I
 		int dRunPeriodIndex;   // 0=1801, 1=1808, 2=CPP, -1=unknown/outside configured ranges
 		bool dIsPolarizedFlag; //else is AMO
 		bool dIsPARAFlag; //else is PERP or AMO
@@ -205,6 +205,8 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 		const char* dPidChoices[kNumPid];
 		double dMinAngles[kNumAngles];
 		double dBeamEnergyRegions[kNumBeamRegions][2];
+		int dNumActiveBeamRegions;
+		bool dBookCPPBeamRegions;
 		double dMassRegions[kNumMassRegions][2];
 		double dMinInvMass[kNumWminCuts];
 		double dMaxChiSq[kNumChiSqCuts];
