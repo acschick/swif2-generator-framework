@@ -19,6 +19,13 @@
     "batch_system": "swif2",
     "jana_epem_config": "jana_2017_epemissp.config",
     "jana_epem_ml_skim_config": "jana_2017_epem_ml_skim.config",
+    "tape_analysisTrees_paths": {
+      "DATA": {
+        "": {
+          "": ""
+        }
+      }
+    },
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 30327,
@@ -62,6 +69,13 @@
     "batch_system": "swif2cont",
     "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
     "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
+    "tape_analysisTrees_paths": {
+      "DATA": {
+        "ver17": {
+          "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2018-01/analysis/ver17/tree_epemmissprot__B2_U1/merged"
+        }
+      }
+    },
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 42559,
@@ -109,6 +123,13 @@
     "batch_system": "swif2cont",
     "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
     "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
+    "tape_analysisTrees_paths": {
+      "DATA": {
+        "ver08": {
+          "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2018-08/analysis/ver08/tree_epemmissprot__B2_U1/merged"
+        }
+      }
+    },
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 51038,
@@ -152,6 +173,13 @@
     "batch_system": "swif2",
     "jana_epem_ReaFil_config": "jana_CPPlaunch1_epem.config",
     "jana_mupmum_ReaFil_config": "jana_CPPlaunch1_mupmum.config",
+    "tape_analysisTrees_paths": {
+      "DATA": {
+        "ver01": {
+          "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2022-05/analysis/ver01/tree_epemmissprot__B2_U1/merged"
+        }
+      }
+    },
     "Polarizations": {
       "135DEG": {
         "characteristic_run": 101582,
