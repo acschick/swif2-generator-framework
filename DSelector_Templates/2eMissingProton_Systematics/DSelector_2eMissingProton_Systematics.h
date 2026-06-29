@@ -153,7 +153,7 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 		void Get_ComboWrappers(void);
 		void Finalize(void);
 		void BookSystematics(void);
-		void FillSystematics(const ComboCutInputs& inputs, Double_t q2kin, Double_t JTphi, Double_t Wmeas, Double_t q2kinRes, bool includeQ2ResSystematics, int runPeriodIndex, int polarizationIndex);
+		void FillSystematics(const ComboCutInputs& inputs, Double_t q2kin, Double_t JTphi, Double_t Wmeas, Double_t q2kinRes, bool includeQ2ResSystematics, int runPeriodIndex, int polarizationIndex, Double_t fillWeight = 1.0);
 		bool ComboPassesCuts(const ComboCutInputs& inputs, const CutConditions& conditions);
 		CutConditions BuildActiveFiducialConditions(void) const;
 	int GetBeamWindowIndex(double beamE);  // Returns 0=FullSpectrum, 1=CoherentPeak, -1=outside ranges

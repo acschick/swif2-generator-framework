@@ -1805,15 +1805,14 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 
 		// Main Fiducial Scope: Fill histograms and perform systematics for combos that pass all cuts up to this point, which may include some or all of the fiducial cuts depending on how the cut conditions are structured.
 		
+		if(dRuntimeFillSwitches.fillSystematics) {
+			const bool includeQ2ResSystematics = (dIsMC && foundThrownParticles);
+			const Double_t q2kinRes = includeQ2ResSystematics ? (qvec2 - qvec2_thrown) : 0.0;
+			FillSystematics(comboCutInputs, qvec2, JTphi, M2TrackKin, q2kinRes, includeQ2ResSystematics, activeRunPeriodIndex, activePolarizationIndex, AccWeight);
+		}
+
 		if(ThisComboIsBestChiSq){
 			// cout << "DEBUG 5.3.2: This is the best in-time combo, about to call FillSystematics" << endl;
-				
-			// Fill systematics histograms for best chi2 combo only
-			if(dRuntimeFillSwitches.fillSystematics) {
-				const bool includeQ2ResSystematics = (dIsMC && foundThrownParticles);
-				const Double_t q2kinRes = includeQ2ResSystematics ? (qvec2 - qvec2_thrown) : 0.0;
-				FillSystematics(comboCutInputs, qvec2, JTphi, M2TrackKin, q2kinRes, includeQ2ResSystematics, activeRunPeriodIndex, activePolarizationIndex);
-			}
 			// cout << "DEBUG 5.3.3: FillSystematics completed" << endl;
 				
 			// Fill thrown histograms for MC - only for best combo
@@ -3141,7 +3140,7 @@ bool DSelector_2eMissingProton_Systematics::ComboPassesCuts(const ComboCutInputs
 	return passedAllCuts;
 }
 
-void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs& inputs, Double_t q2kin, Double_t JTphi, Double_t Wmeas, Double_t q2kinRes, bool includeQ2ResSystematics, int runPeriodIndex, int polarizationIndex)
+void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs& inputs, Double_t q2kin, Double_t JTphi, Double_t Wmeas, Double_t q2kinRes, bool includeQ2ResSystematics, int runPeriodIndex, int polarizationIndex, Double_t fillWeight)
 {
 	// cout << "DEBUG FILLSYST 1: Entered FillSystematics function" << endl;
 	const bool fillQ2ResSystematics = includeQ2ResSystematics && dIsMC;
@@ -3150,7 +3149,8 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 	const bool enableChiSqSystematics = true;
 	const bool fillJTphiByRunPol = (runPeriodIndex >= 0 && runPeriodIndex < kNumRunPeriods && polarizationIndex >= 0 && polarizationIndex < nPolarizations);
 
-	const CutConditions activeFiducialConditions = BuildActiveFiducialConditions();
+	CutConditions activeFiducialConditions = BuildActiveFiducialConditions();
+	activeFiducialConditions.applyBestChiSqComboCut = false;
 
 	auto setJTphiBeamWindow = [&](CutConditions& conditions) {
 		if(dIsCPPRunPeriod) {
@@ -3187,11 +3187,11 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		for (int j = 0; j < kNumPid; j++) {
 			fidCutsOff.particleChoice = dPidChoices[j];
 			if (ComboPassesCuts(inputs, fidCutsOff)) {
-				dHist_theta1_noCuts[i][j]->Fill(inputs.theta1);
-				dHist_theta2_noCuts[i][j]->Fill(inputs.theta2);
-				dHist_Wepem_kin_noCuts[i][j]->Fill(inputs.Wkin);
-				dHist_Wepem_Measured_noCuts[i][j]->Fill(Wmeas);
-				dHist_KinFitChiSq_noCuts[i][j]->Fill(inputs.chisqndf);
+				dHist_theta1_noCuts[i][j]->Fill(inputs.theta1, fillWeight);
+				dHist_theta2_noCuts[i][j]->Fill(inputs.theta2, fillWeight);
+				dHist_Wepem_kin_noCuts[i][j]->Fill(inputs.Wkin, fillWeight);
+				dHist_Wepem_Measured_noCuts[i][j]->Fill(Wmeas, fillWeight);
+				dHist_KinFitChiSq_noCuts[i][j]->Fill(inputs.chisqndf, fillWeight);
 			}
 		}
 	}
@@ -3207,8 +3207,8 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		for (int j = 0; j < kNumPid; j++) {
 			fidButThetaOff.particleChoice = dPidChoices[j];
 			if (ComboPassesCuts(inputs, fidButThetaOff)) {
-				dHist_theta1_fidCuts_noTheta[i][j]->Fill(inputs.theta1);
-				dHist_theta2_fidCuts_noTheta[i][j]->Fill(inputs.theta2);
+				dHist_theta1_fidCuts_noTheta[i][j]->Fill(inputs.theta1, fillWeight);
+				dHist_theta2_fidCuts_noTheta[i][j]->Fill(inputs.theta2, fillWeight);
 			}
 		}
 	}
@@ -3222,8 +3222,8 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		for (int j = 0; j < kNumPid; j++) {
 			fidButWOff.particleChoice = dPidChoices[j];
 			if (ComboPassesCuts(inputs, fidButWOff)) {
-				dHist_Wepem_kin_fidCuts_noWcut[i][j]->Fill(inputs.Wkin);
-				dHist_Wepem_Measured_fidCuts_noWcut[i][j]->Fill(Wmeas);
+				dHist_Wepem_kin_fidCuts_noWcut[i][j]->Fill(inputs.Wkin, fillWeight);
+				dHist_Wepem_Measured_fidCuts_noWcut[i][j]->Fill(Wmeas, fillWeight);
 			}
 		}
 	}
@@ -3236,12 +3236,12 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		for (int j = 0; j < kNumPid; j++) {
 			thetaSystConditions.particleChoice = dPidChoices[j];
 			if (ComboPassesCuts(inputs, thetaSystConditions)) {
-				dHist_theta2_vs_theta1_2DCutOFF[i][j]->Fill(inputs.theta1, inputs.theta2);
-				dHist_JTphi_FID_2DCutOFF[i][j]->Fill(JTphi);
-				dHist_q2kin_FID_2DCutOFF[i][j]->Fill(q2kin);
-				dHist_q2kin_varWidth_FID_2DCutOFF[i][j]->Fill(q2kin);
+				dHist_theta2_vs_theta1_2DCutOFF[i][j]->Fill(inputs.theta1, inputs.theta2, fillWeight);
+				dHist_JTphi_FID_2DCutOFF[i][j]->Fill(JTphi, fillWeight);
+				dHist_q2kin_FID_2DCutOFF[i][j]->Fill(q2kin, fillWeight);
+				dHist_q2kin_varWidth_FID_2DCutOFF[i][j]->Fill(q2kin, fillWeight);
 				if(fillQ2ResSystematics)
-					dHist_qvec2_res_vs_q2kin_FID_2DCutOFF[i][j]->Fill(q2kin, q2kinRes);
+					dHist_qvec2_res_vs_q2kin_FID_2DCutOFF[i][j]->Fill(q2kin, q2kinRes, fillWeight);
 			}
 		}
 	}
@@ -3261,13 +3261,13 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 				conditions.minTheta = dMinAngles[k];
 				setJTphiBeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions))
-					dHist_JTphi_angles[i][j][k]->Fill(JTphi);
+					dHist_JTphi_angles[i][j][k]->Fill(JTphi, fillWeight);
 				setQ2BeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions)) {
-					dHist_q2kin_angles[i][j][k]->Fill(q2kin);
-					dHist_q2kin_varWidth_angles[i][j][k]->Fill(q2kin);
+					dHist_q2kin_angles[i][j][k]->Fill(q2kin, fillWeight);
+					dHist_q2kin_varWidth_angles[i][j][k]->Fill(q2kin, fillWeight);
 					if(fillQ2ResSystematics)
-						dHist_qvec2_res_vs_q2kin_angles[i][j][k]->Fill(q2kin, q2kinRes);
+						dHist_qvec2_res_vs_q2kin_angles[i][j][k]->Fill(q2kin, q2kinRes, fillWeight);
 				}
 			}
 			conditions.minTheta = activeFiducialConditions.minTheta;
@@ -3276,13 +3276,13 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 				conditions.minWkin = dMinInvMass[k];
 				setJTphiBeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions))
-					dHist_JTphi_WminCuts[i][j][k]->Fill(JTphi);
+					dHist_JTphi_WminCuts[i][j][k]->Fill(JTphi, fillWeight);
 				setQ2BeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions)) {
-					dHist_q2kin_WminCuts[i][j][k]->Fill(q2kin);
-					dHist_q2kin_varWidth_WminCuts[i][j][k]->Fill(q2kin);
+					dHist_q2kin_WminCuts[i][j][k]->Fill(q2kin, fillWeight);
+					dHist_q2kin_varWidth_WminCuts[i][j][k]->Fill(q2kin, fillWeight);
 					if(fillQ2ResSystematics)
-						dHist_qvec2_res_vs_q2kin_WminCuts[i][j][k]->Fill(q2kin, q2kinRes);
+						dHist_qvec2_res_vs_q2kin_WminCuts[i][j][k]->Fill(q2kin, q2kinRes, fillWeight);
 				}
 			}
 			conditions.minWkin = activeFiducialConditions.minWkin;
@@ -3291,11 +3291,11 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 				conditions.minBeamE = dBeamEnergyRegions[k][0];
 				conditions.maxBeamE = dBeamEnergyRegions[k][1];
 				if (ComboPassesCuts(inputs, conditions)) {
-					dHist_JTphi_BeamRegions[i][j][k]->Fill(JTphi);
-					dHist_q2kin_BeamRegions[i][j][k]->Fill(q2kin);
-					dHist_q2kin_varWidth_BeamRegions[i][j][k]->Fill(q2kin);
+					dHist_JTphi_BeamRegions[i][j][k]->Fill(JTphi, fillWeight);
+					dHist_q2kin_BeamRegions[i][j][k]->Fill(q2kin, fillWeight);
+					dHist_q2kin_varWidth_BeamRegions[i][j][k]->Fill(q2kin, fillWeight);
 					if(fillQ2ResSystematics)
-						dHist_qvec2_res_vs_q2kin_BeamRegions[i][j][k]->Fill(q2kin, q2kinRes);
+						dHist_qvec2_res_vs_q2kin_BeamRegions[i][j][k]->Fill(q2kin, q2kinRes, fillWeight);
 				}
 			}
 			setQ2BeamWindow(conditions);
@@ -3305,14 +3305,14 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 				conditions.maxWkin = dMassRegions[k][1];
 				setJTphiBeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions))
-					dHist_JTphi_MassRegions[i][j][k]->Fill(JTphi);
+					dHist_JTphi_MassRegions[i][j][k]->Fill(JTphi, fillWeight);
 				setQ2BeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions)) {
-					dHist_Wkin_MassRegions[i][j][k]->Fill(inputs.Wkin);
-					dHist_q2kin_MassRegions[i][j][k]->Fill(q2kin);
-					dHist_q2kin_varWidth_MassRegions[i][j][k]->Fill(q2kin);
+					dHist_Wkin_MassRegions[i][j][k]->Fill(inputs.Wkin, fillWeight);
+					dHist_q2kin_MassRegions[i][j][k]->Fill(q2kin, fillWeight);
+					dHist_q2kin_varWidth_MassRegions[i][j][k]->Fill(q2kin, fillWeight);
 					if(fillQ2ResSystematics)
-						dHist_qvec2_res_vs_q2kin_MassRegions[i][j][k]->Fill(q2kin, q2kinRes);
+						dHist_qvec2_res_vs_q2kin_MassRegions[i][j][k]->Fill(q2kin, q2kinRes, fillWeight);
 				}
 			}
 			conditions.minWkin = activeFiducialConditions.minWkin;
@@ -3324,13 +3324,13 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 					conditions.maxKFChiSq = dMaxChiSq[k];
 					setJTphiBeamWindow(conditions);
 					if (ComboPassesCuts(inputs, conditions))
-						dHist_JTphi_MaxChiSq[i][j][k]->Fill(JTphi);
+						dHist_JTphi_MaxChiSq[i][j][k]->Fill(JTphi, fillWeight);
 					setQ2BeamWindow(conditions);
 					if (ComboPassesCuts(inputs, conditions)) {
-						dHist_q2kin_MaxChiSq[i][j][k]->Fill(q2kin);
-						dHist_q2kin_varWidth_MaxChiSq[i][j][k]->Fill(q2kin);
+						dHist_q2kin_MaxChiSq[i][j][k]->Fill(q2kin, fillWeight);
+						dHist_q2kin_varWidth_MaxChiSq[i][j][k]->Fill(q2kin, fillWeight);
 						if(fillQ2ResSystematics)
-							dHist_qvec2_res_vs_q2kin_MaxChiSq[i][j][k]->Fill(q2kin, q2kinRes);
+							dHist_qvec2_res_vs_q2kin_MaxChiSq[i][j][k]->Fill(q2kin, q2kinRes, fillWeight);
 					}
 				}
 				conditions.applyChiSqCut = activeFiducialConditions.applyChiSqCut;
@@ -3347,14 +3347,14 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		mvaSystConds.MLP_ee = dMLPeeThresholds[i];
 		setJTphiBeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_JTphi_MLP_ee[i]->Fill(JTphi);
+			dHist_JTphi_MLP_ee[i]->Fill(JTphi, fillWeight);
 		}
 		setQ2BeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_q2kin_MLP_ee[i]->Fill(q2kin);
-			dHist_q2kin_varWidth_MLP_ee[i]->Fill(q2kin);
+			dHist_q2kin_MLP_ee[i]->Fill(q2kin, fillWeight);
+			dHist_q2kin_varWidth_MLP_ee[i]->Fill(q2kin, fillWeight);
 			if(fillQ2ResSystematics)
-				dHist_qvec2_res_vs_q2kin_MLP_ee[i]->Fill(q2kin, q2kinRes);
+				dHist_qvec2_res_vs_q2kin_MLP_ee[i]->Fill(q2kin, q2kinRes, fillWeight);
 		}
 	}
 
@@ -3363,14 +3363,14 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		mvaSystConds.MLP_pi = dMLPpiThresholds[i];
 		setJTphiBeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_JTphi_MLP_pi[i]->Fill(JTphi);
+			dHist_JTphi_MLP_pi[i]->Fill(JTphi, fillWeight);
 		}
 		setQ2BeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_q2kin_MLP_pi[i]->Fill(q2kin);
-			dHist_q2kin_varWidth_MLP_pi[i]->Fill(q2kin);
+			dHist_q2kin_MLP_pi[i]->Fill(q2kin, fillWeight);
+			dHist_q2kin_varWidth_MLP_pi[i]->Fill(q2kin, fillWeight);
 			if(fillQ2ResSystematics)
-				dHist_qvec2_res_vs_q2kin_MLP_pi[i]->Fill(q2kin, q2kinRes);
+				dHist_qvec2_res_vs_q2kin_MLP_pi[i]->Fill(q2kin, q2kinRes, fillWeight);
 		}
 	}
 
@@ -3379,14 +3379,14 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		mvaSystConds.BDT_pi = dBDTpiThresholds[i];
 		setJTphiBeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_JTphi_BDT_pi[i]->Fill(JTphi);
+			dHist_JTphi_BDT_pi[i]->Fill(JTphi, fillWeight);
 		}
 		setQ2BeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_q2kin_BDT_pi[i]->Fill(q2kin);
-			dHist_q2kin_varWidth_BDT_pi[i]->Fill(q2kin);
+			dHist_q2kin_BDT_pi[i]->Fill(q2kin, fillWeight);
+			dHist_q2kin_varWidth_BDT_pi[i]->Fill(q2kin, fillWeight);
 			if(fillQ2ResSystematics)
-				dHist_qvec2_res_vs_q2kin_BDT_pi[i]->Fill(q2kin, q2kinRes);
+				dHist_qvec2_res_vs_q2kin_BDT_pi[i]->Fill(q2kin, q2kinRes, fillWeight);
 		}
 	}
 
@@ -3395,24 +3395,24 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 		mvaSystConds.BDT_ee = dBDTeeThresholds[i];
 		setJTphiBeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_JTphi_BDT_ee[i]->Fill(JTphi);
+			dHist_JTphi_BDT_ee[i]->Fill(JTphi, fillWeight);
 		}
 		setQ2BeamWindow(mvaSystConds);
 		if (ComboPassesCuts(inputs, mvaSystConds)) {
-			dHist_q2kin_BDT_ee[i]->Fill(q2kin);
-			dHist_q2kin_varWidth_BDT_ee[i]->Fill(q2kin);
+			dHist_q2kin_BDT_ee[i]->Fill(q2kin, fillWeight);
+			dHist_q2kin_varWidth_BDT_ee[i]->Fill(q2kin, fillWeight);
 			if(fillQ2ResSystematics)
-				dHist_qvec2_res_vs_q2kin_BDT_ee[i]->Fill(q2kin, q2kinRes);
+				dHist_qvec2_res_vs_q2kin_BDT_ee[i]->Fill(q2kin, q2kinRes, fillWeight);
 		}
 	}
 
-	dHist_MLP_responsePIP->Fill(inputs.MLP1);
-	dHist_MLP_responsePIM->Fill(inputs.MLP2);
-	dHist_MLP_response_PIP_vs_PIM->Fill(inputs.MLP2, inputs.MLP1);
+	dHist_MLP_responsePIP->Fill(inputs.MLP1, fillWeight);
+	dHist_MLP_responsePIM->Fill(inputs.MLP2, fillWeight);
+	dHist_MLP_response_PIP_vs_PIM->Fill(inputs.MLP2, inputs.MLP1, fillWeight);
 
-	dHist_BDT_responsePIP->Fill(inputs.BDT1);
-	dHist_BDT_responsePIM->Fill(inputs.BDT2);
-	dHist_BDT_response_PIP_vs_PIM->Fill(inputs.BDT2, inputs.BDT1);
+	dHist_BDT_responsePIP->Fill(inputs.BDT1, fillWeight);
+	dHist_BDT_responsePIM->Fill(inputs.BDT2, fillWeight);
+	dHist_BDT_response_PIP_vs_PIM->Fill(inputs.BDT2, inputs.BDT1, fillWeight);
 }
 
 /* Commented out - ApplyFCALCorrections not implemented in systematics selector
