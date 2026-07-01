@@ -170,7 +170,8 @@
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "analysis_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",
     "background_version": "Random:recon-2022_05-ver01.4",
-    "RCDB_query": "@is_cpp_production and (status==1 or status==6) and (polarization_angle=={polDeg}) and target_type=='FULL'",
+    "RCDB_query": "@is_cpp_production and (status==1 or status==6) and (polarization_angle=={polDeg}) and target_type==\"{targetType}\"",
+    "TargetTypes": ["FULL", "EMPTY"],
     "batch_system": "swif2",
     "jana_epem_ReaFil_config": "jana_CPPlaunch1_epem.config",
     "jana_mupmum_ReaFil_config": "jana_CPPlaunch1_mupmum.config",
@@ -182,7 +183,8 @@
         "epemMLskim_45DEG": {
           "tree_gpb208_epemmisspb208__B2": "/mss/halld/RunPeriod-2022-05/skims/epem/analysis_epemlskim/45DEG/tree_gpb208_epemmisspb208__B2/"
         }
-      },
+      }
+    },
     "Polarizations": {
       "135DEG": {
         "characteristic_run": 101582,

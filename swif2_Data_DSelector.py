@@ -10,6 +10,7 @@ Usage:
     python swif2_Data_DSelector.py [--config workflows_root_analysis.config]
     python swif2_Data_DSelector.py --dry-run
     python swif2_Data_DSelector.py --run-period 1801 --polarizations 0DEG,45DEG
+    python swif2_Data_DSelector.py --run-period 2205 --polarizations 45DEG,135DEG --targets FULL,EMPTY
 """
 
 import os
@@ -18,7 +19,6 @@ import json
 import subprocess
 import argparse
 from pathlib import Path
-from collections import defaultdict
 
 # Framework paths
 FRAMEWORK_DIR = Path(__file__).parent.resolve()
@@ -73,7 +73,7 @@ def expand_list(value_str, available_options):
     return [v.strip() for v in value_str.split(',')]
 
 
-def get_rcdb_query(run_period, polarization, run_periods_data):
+def get_rcdb_query(run_period, polarization, run_periods_data, target_type=None):
     """
     Get RCDB query string for run period and polarization.
     launch.py will use this query to filter runs.
@@ -82,6 +82,7 @@ def get_rcdb_query(run_period, polarization, run_periods_data):
         run_period: Run period identifier (e.g., '1801')
         polarization: Polarization string (e.g., '0DEG')
         run_periods_data: Data from RunPeriods.json
+        target_type: Optional target type (e.g., 'FULL' or 'EMPTY')
         
     Returns:
         RCDB query string, or None if not available
@@ -102,19 +103,20 @@ def get_rcdb_query(run_period, polarization, run_periods_data):
             print(f"    WARNING: No RCDB query template for {run_period}")
             return None
         
-        # Substitute polarization angle
-        # Convert "0DEG" -> "0", "45DEG" -> "45", etc.
-        # AMO is typically handled with polarization_angle==0
+        # Substitute polarization angle. AMO is represented in RCDB with
+        # polarization_angle==-1.0, not as a 0-degree diamond orientation.
         pol_map = {
             '0DEG': '0',
             '45DEG': '45',
             '90DEG': '90',
             '135DEG': '135',
-            'AMO': '-1.0'  # AMO uses -1.0 degree polarization angle
+            'AMO': '-1.0'
         }
         
         pol_deg = pol_map.get(polarization, '0')
         rcdb_query = rcdb_query_template.replace('{polDeg}', pol_deg)
+        if target_type:
+            rcdb_query = rcdb_query.replace('{targetType}', target_type)
         
         print(f"    RCDB query: {rcdb_query}")
         return rcdb_query
@@ -155,6 +157,29 @@ def get_run_range(run_period, run_periods_data):
         return None
 
 
+def get_analysis_version(config, run_period, polarization, run_periods_data):
+    """Choose the analysis tree version/path key for this run period and polarization."""
+    pol_key = f'ANALYSIS_VERSION_{run_period}_{polarization}'
+    if pol_key in config:
+        return config[pol_key]
+    
+    period_key = f'ANALYSIS_VERSION_{run_period}'
+    if period_key in config:
+        analysis_version = config[period_key]
+        if '{polarization}' in analysis_version:
+            return analysis_version.replace('{polarization}', polarization)
+        if '{Polarization}' in analysis_version:
+            return analysis_version.replace('{Polarization}', polarization)
+        return analysis_version
+    
+    data_paths = run_periods_data.get(run_period, {}).get('tape_analysisTrees_paths', {}).get('DATA', {})
+    matching_versions = [key for key in data_paths if polarization in key]
+    if len(matching_versions) == 1:
+        return matching_versions[0]
+    
+    return 'ver01'
+
+
 def get_mss_path(run_period, tree_type, analysis_version, run_periods_data):
     """
     Get MSS path to merged tree files from RunPeriods.json.
@@ -177,10 +202,6 @@ def get_mss_path(run_period, tree_type, analysis_version, run_periods_data):
         
         if analysis_version in data_paths:
             version_trees = data_paths[analysis_version]
-            
-            # Try with tree_ prefix first (JSON format), then without
-            tree_key = f"tree_{tree_type}" if not tree_type.startswith('tree_') else tree_type
-            tree_key_alt = tree_type.replace('tree_', '', 1) if tree_type.startswith('tree_') else f"tree_{tree_type}"
             
             # Try with tree_ prefix first (JSON format), then without
             tree_key = f"tree_{tree_type}" if not tree_type.startswith('tree_') else tree_type
@@ -250,6 +271,31 @@ def get_tree_name_from_type(tree_type):
     
     # Construct tree name by appending "_Tree"
     return f"{base_type}_Tree"
+
+
+def get_targets(config, args, run_period, run_periods_data):
+    """Return target types to process, or [None] when target splitting is disabled."""
+    if args.targets:
+        return args.targets.split(',')
+    
+    if 'TARGETS' in config:
+        return expand_list(config['TARGETS'], run_periods_data.get(run_period, {}).get('TargetTypes', []))
+    
+    target_types = run_periods_data.get(run_period, {}).get('TargetTypes', [])
+    return target_types if target_types else [None]
+
+
+def get_polarizations_for_period(config, args, run_period, run_periods_data):
+    """Return requested polarizations, using the run-period JSON order for ALL."""
+    period_pols = list(run_periods_data.get(run_period, {}).get('Polarizations', {}).keys())
+    fallback_pols = ['0DEG', '45DEG', '90DEG', '135DEG', 'AMO']
+    available_pols = period_pols if period_pols else fallback_pols
+    
+    if args.polarizations:
+        return [pol.strip() for pol in args.polarizations.split(',')]
+    
+    pol_config = config.get('POLARIZATIONS', 'ALL')
+    return expand_list(pol_config, available_pols)
 
 
 def create_job_config(output_dir, log_dir, workflow_name, input_dir, 
@@ -356,17 +402,10 @@ def process_data_selection(config, run_periods_data, args):
     
     # Determine which run periods and polarizations to process
     available_periods = list(run_periods_data.keys())
-    available_pols = ['0DEG', '45DEG', '90DEG', '135DEG', 'AMO']
-    
     if args.run_period:
         run_periods = [args.run_period]
     else:
         run_periods = expand_list(config.get('RUN_PERIODS', 'ALL'), available_periods)
-    
-    if args.polarizations:
-        polarizations = args.polarizations.split(',')
-    else:
-        polarizations = expand_list(config.get('POLARIZATIONS', 'ALL'), available_pols)
     
     # Get other config parameters
     tree_type = config.get('TREE_TYPE', 'epemmissprot__B2_U1')
@@ -384,7 +423,10 @@ def process_data_selection(config, run_periods_data, args):
     print(f"\n{'='*70}")
     print(f"Processing Configuration:")
     print(f"  Run Periods: {', '.join(run_periods)}")
-    print(f"  Polarizations: {', '.join(polarizations)}")
+    if args.polarizations:
+        print(f"  Polarizations: {args.polarizations}")
+    else:
+        print(f"  Polarizations: {config.get('POLARIZATIONS', 'ALL')} (per run period)")
     print(f"  Tree Type: {tree_type}")
     print(f"  DSelector: {dselector_path.name}")
     print(f"  Output Base: {output_base}")
@@ -401,67 +443,83 @@ def process_data_selection(config, run_periods_data, args):
         print(f"Run Period: {run_period}")
         print(f"{'='*70}")
         
-        # Get analysis version for this run period
-        analysis_version = config.get(f'ANALYSIS_VERSION_{run_period}', 'ver01')
-        print(f"  Analysis Version: {analysis_version}")
+        targets = get_targets(config, args, run_period, run_periods_data)
+        if targets != [None]:
+            print(f"  Targets: {', '.join(targets)}")
+        
+        polarizations = get_polarizations_for_period(config, args, run_period, run_periods_data)
         
         for polarization in polarizations:
             print(f"\n  Polarization: {polarization}")
             print(f"  {'-'*66}")
             
-            total_workflows += 1
+            analysis_version = get_analysis_version(config, run_period, polarization, run_periods_data)
+            print(f"    Analysis Version: {analysis_version}")
             
-            # Get RCDB query (launch.py will use this to filter runs)
-            rcdb_query = get_rcdb_query(run_period, polarization, run_periods_data)
-            
-            if not rcdb_query:
-                print(f"    Skipping {run_period} {polarization} (no RCDB query)")
-                continue
-            
-            # Get run range from RunPeriods.json
-            run_range = get_run_range(run_period, run_periods_data)
-            
-            if not run_range:
-                print(f"    Skipping {run_period} {polarization} (no run range)")
-                continue
-            
-            print(f"    Run range: {run_range[0]}-{run_range[1]}")
-            
-            # Get MSS input path from RunPeriods.json
-            mss_input_dir = get_mss_path(run_period, tree_type, analysis_version, run_periods_data)
-            
-            if not mss_input_dir:
-                print(f"    Skipping {run_period} {polarization} (MSS path not found)")
-                continue
-            
-            # Create workflow name
-            workflow_name = f"{workflow_prefix}_{run_period}_{polarization}"
-            
-            # Create output directories (handle {RunPeriod} placeholder)
-            output_dir = Path(str(output_base).replace('{RunPeriod}', run_period)) / polarization
-            log_dir = Path(str(log_base).replace('{RunPeriod}', run_period)) / polarization
-            
-            output_dir.mkdir(parents=True, exist_ok=True)
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Get tree name from tree_type or config override
-            tree_name = config.get('TREE_NAME')
-            if not tree_name:
-                tree_name = get_tree_name_from_type(tree_type)
-            
-            print(f"    Tree name: {tree_name}")
-            print(f"    Workflow: {workflow_name}")
-            print(f"    Output: {output_dir}")
-            
-            # Create job config file
-            job_config = create_job_config(
-                output_dir, log_dir, workflow_name,
-                mss_input_dir, dselector_path, tree_name, rcdb_query, config
-            )
-            
-            # Submit workflow
-            if submit_workflow(workflow_name, job_config, run_range, dry_run):
-                success_count += 1
+            for target_type in targets:
+                if target_type:
+                    print(f"\n    Target: {target_type}")
+                    print(f"    {'-'*62}")
+                
+                total_workflows += 1
+                
+                # Get RCDB query (launch.py will use this to filter runs)
+                rcdb_query = get_rcdb_query(run_period, polarization, run_periods_data, target_type)
+                
+                if not rcdb_query:
+                    print(f"    Skipping {run_period} {polarization} (no RCDB query)")
+                    continue
+                
+                # Get run range from RunPeriods.json
+                run_range = get_run_range(run_period, run_periods_data)
+                
+                if not run_range:
+                    print(f"    Skipping {run_period} {polarization} (no run range)")
+                    continue
+                
+                print(f"    Run range: {run_range[0]}-{run_range[1]}")
+                
+                # Get MSS input path from RunPeriods.json
+                mss_input_dir = get_mss_path(run_period, tree_type, analysis_version, run_periods_data)
+                
+                if not mss_input_dir:
+                    print(f"    Skipping {run_period} {polarization} (MSS path not found)")
+                    continue
+                
+                # Create workflow name
+                workflow_parts = [workflow_prefix, run_period, polarization]
+                if target_type:
+                    workflow_parts.append(target_type)
+                workflow_name = "_".join(workflow_parts)
+                
+                # Create output directories (handle {RunPeriod} placeholder)
+                output_dir = Path(str(output_base).replace('{RunPeriod}', run_period)) / polarization
+                log_dir = Path(str(log_base).replace('{RunPeriod}', run_period)) / polarization
+                if target_type:
+                    output_dir = output_dir / target_type
+                    log_dir = log_dir / target_type
+                
+                output_dir.mkdir(parents=True, exist_ok=True)
+                log_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Get tree name from tree_type or config override
+                tree_name = config.get('TREE_NAME')
+                if not tree_name:
+                    tree_name = get_tree_name_from_type(tree_type)
+                
+                print(f"    Tree name: {tree_name}")
+                print(f"    Workflow: {workflow_name}")
+                print(f"    Output: {output_dir}")
+                
+                # Create job config file
+                job_config = create_job_config(
+                    output_dir, log_dir, workflow_name,
+                    mss_input_dir, dselector_path, tree_name, rcdb_query, config
+                )
+                
+                # Submit workflow
+                if submit_workflow(workflow_name, job_config, run_range, dry_run):
+                    success_count += 1
     
     # Summary
     print(f"\n{'='*70}")
@@ -486,6 +544,9 @@ Examples:
   
   # Process specific polarizations
   python swif2_Data_DSelector.py --polarizations 0DEG,45DEG
+
+  # Process CPP full and empty target data separately
+  python swif2_Data_DSelector.py --run-period 2205 --polarizations 45DEG,135DEG --targets FULL,EMPTY
   
   # Dry run to preview
   python swif2_Data_DSelector.py --dry-run
@@ -501,6 +562,8 @@ Examples:
                        help='Process specific run period (overrides config)')
     parser.add_argument('--polarizations',
                        help='Comma-separated polarizations to process (overrides config)')
+    parser.add_argument('--targets',
+                       help='Comma-separated target types to process (e.g. FULL,EMPTY; overrides config)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be done without submitting')
     parser.add_argument('--verbose', action='store_true',
