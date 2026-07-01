@@ -177,10 +177,10 @@
     "tape_analysisTrees_paths": {
       "DATA": {
         "epemMLskim_135DEG": {
-          "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2022-05/skims/epem/analysis_epemlskim/135DEG/tree_gpb208_epemmisspb208__B2/"
+          "tree_gpb208_epemmisspb208__B2": "/mss/halld/RunPeriod-2022-05/skims/epem/analysis_epemlskim/135DEG/tree_gpb208_epemmisspb208__B2/"
         },
         "epemMLskim_45DEG": {
-          "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2022-05/skims/epem/analysis_epemlskim/45DEG/tree_gpb208_epemmisspb208__B2/"
+          "tree_gpb208_epemmisspb208__B2": "/mss/halld/RunPeriod-2022-05/skims/epem/analysis_epemlskim/45DEG/tree_gpb208_epemmisspb208__B2/"
         }
       },
     "Polarizations": {
