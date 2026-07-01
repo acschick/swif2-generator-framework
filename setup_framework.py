@@ -12,7 +12,7 @@ This will:
 1. Auto-detect your username
 2. Auto-detect framework installation directory
 3. Detect your shell type (bash/csh)
-4. Generate user-local workflow defaults
+4. Generate user-local real-data DSelector defaults
 5. Update all .config files in GeneratorConfigExamples/
 6. Save settings for downstream scripts (prepareSimulation.py, etc.)
 """
@@ -21,6 +21,7 @@ import os
 import sys
 import json
 import glob
+import shutil
 from pathlib import Path
 
 
@@ -122,8 +123,8 @@ def build_framework_settings(username, framework_home, shell_type):
         'shell_type': shell_type,
         'volatile_base': volatile_base,
         'farm_out_base': farm_out_base,
-        'real_data_output_base': f"{volatile_base}/RealDataAnalysis/{{RunPeriod}}",
-        'real_data_log_base': f"{farm_out_base}/DSelector_logs/RealData/{{RunPeriod}}",
+        'real_data_output_base': f"{volatile_base}/RealDataDSelector/{{RunPeriod}}",
+        'real_data_log_base': f"{farm_out_base}/DSelector_logs/RealDataDSelector/{{RunPeriod}}",
         'rbhg_output_base': f"{volatile_base}/RBHG",
         'spizg_output_base': f"{volatile_base}/SPIZG",
         'root_analysis_launch_script': os.path.join(framework_home, 'DSelector_Templates', 'launch.py'),
@@ -160,9 +161,15 @@ def make_directory(path):
 
 def write_default_data_dselector_config(settings, overwrite=False):
     """Create the default real-data DSelector config used by swif2_Data_DSelector.py."""
-    config_path = os.path.join(settings['framework_home'], 'workflows_root_analysis.config')
+    config_path = os.path.join(settings['framework_home'], 'data_dselector.config')
+    legacy_config_path = os.path.join(settings['framework_home'], 'workflows_root_analysis.config')
     if os.path.exists(config_path) and not overwrite:
         print(f"  ✓ Existing {os.path.basename(config_path)} left unchanged")
+        return config_path
+    if os.path.exists(legacy_config_path) and not overwrite:
+        shutil.copyfile(legacy_config_path, config_path)
+        print(f"  ✓ Copied legacy workflows_root_analysis.config to {os.path.basename(config_path)}")
+        print("    The old name is still accepted, but data_dselector.config is clearer.")
         return config_path
     
     content = f"""# Real-data DSelector workflow configuration
@@ -299,7 +306,7 @@ def main():
     print()
     
     # Step 5: Generate workflow defaults
-    print("[5/6] Generating workflow defaults...")
+    print("[5/6] Generating real-data DSelector defaults...")
     write_default_data_dselector_config(settings)
     print()
     

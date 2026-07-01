@@ -13,7 +13,7 @@ Run the framework setup once after cloning:
 ./setup_framework.py
 ```
 
-Setup detects `$USER`, writes `framework_settings.json`, creates safe user-owned base directories when possible, and creates `workflows_root_analysis.config` if it does not already exist. The scripts also have `$USER`-aware defaults, so they no longer depend on hardcoded personal paths.
+Setup detects `$USER`, writes `framework_settings.json`, creates safe user-owned base directories when possible, and creates `data_dselector.config` if it does not already exist. The scripts also have `$USER`-aware defaults, so they no longer depend on hardcoded personal paths.
 
 ## Real Data: `swif2_Data_DSelector.py`
 
@@ -25,7 +25,9 @@ This tool does accept `--config`:
 python3 swif2_Data_DSelector.py --config my_dselector_data.config --dry-run
 ```
 
-The config file is a simple `KEY=VALUE` file. It is not JSON.
+The default config file is `data_dselector.config`. It configures only `swif2_Data_DSelector.py`; it is not used by the simulation DSelector wrapper. The config file is a simple `KEY=VALUE` file. It is not JSON.
+
+Older checkouts may have the legacy name `workflows_root_analysis.config`. The data tool still accepts that name if you pass it with `--config`, and it will use it as a fallback if `data_dselector.config` is missing, but new setup runs create the clearer `data_dselector.config` name.
 
 ### Minimal Config Example
 
@@ -66,6 +68,13 @@ python3 swif2_Data_DSelector.py \
 
 Remove `--dry-run` to submit.
 
+Dry runs are preview-only: they do not create output directories, log directories, SWIF2 workflows, or generated `jobs_root_analysis.config` files. This means the normal workflow is:
+
+```bash
+python3 swif2_Data_DSelector.py --config data_dselector.config --dry-run
+python3 swif2_Data_DSelector.py --config data_dselector.config
+```
+
 ### Output Directories And Existing Output
 
 The data tool builds output directories from `OUTPUT_BASE_DIR`, then appends the polarization and, when active, the target type.
@@ -73,27 +82,27 @@ The data tool builds output directories from `OUTPUT_BASE_DIR`, then appends the
 The default base paths are:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis/{RunPeriod}
-LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealData/{RunPeriod}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataDSelector/{RunPeriod}
+LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealDataDSelector/{RunPeriod}
 ```
 
 With those defaults, a GlueX run over `1801` and `0DEG` writes under:
 
 ```text
-/volatile/halld/home/$USER/RealDataAnalysis/1801/0DEG/
+/volatile/halld/home/$USER/RealDataDSelector/1801/0DEG/
 ```
 
 For CPP with target splitting, `2205`, `45DEG`, and `FULL` writes under:
 
 ```text
-/volatile/halld/home/$USER/RealDataAnalysis/2205/45DEG/FULL/
+/volatile/halld/home/$USER/RealDataDSelector/2205/45DEG/FULL/
 ```
 
 You can place the placeholders directly in the config if you want a different layout:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis/{RunPeriod}/{Polarization}/{TargetType}
-LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealData/{RunPeriod}/{Polarization}/{TargetType}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataDSelector/{RunPeriod}/{Polarization}/{TargetType}
+LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealDataDSelector/{RunPeriod}/{Polarization}/{TargetType}
 ```
 
 If `{Polarization}` is not present in `OUTPUT_BASE_DIR`, the tool appends the polarization directory automatically. If `{TargetType}` is not present and target splitting is active, it appends the target directory automatically.
@@ -121,10 +130,12 @@ python3 swif2_Data_DSelector.py \
   --dry-run
 ```
 
+During `--dry-run`, existing non-empty output directories are reported but do not cause the preview to fail. On an actual submit, `EXISTING_OUTPUT_MODE` is enforced before any directories or job config files are created.
+
 The tool does not delete old output for you. If you want a clean rerun after changing a DSelector, the safest pattern is to change `OUTPUT_BASE_DIR` or `WORKFLOW_PREFIX`, for example:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis_dselectorV2/{RunPeriod}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataDSelector_dselectorV2/{RunPeriod}
 WORKFLOW_PREFIX=DSELECTOR_DATA_V2
 ```
 

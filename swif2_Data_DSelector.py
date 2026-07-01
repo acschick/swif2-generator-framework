@@ -3,11 +3,11 @@
 swif2_Data_DSelector.py
 
 Submits DSelector analysis jobs for real experimental data.
-Reads configuration from workflows_root_analysis.config and RunPeriods.json
+Reads configuration from data_dselector.config and RunPeriods.json
 to automatically create SWIF2 workflows organized by run period and polarization.
 
 Usage:
-    python swif2_Data_DSelector.py [--config workflows_root_analysis.config]
+    python swif2_Data_DSelector.py [--config data_dselector.config]
     python swif2_Data_DSelector.py --dry-run
     python swif2_Data_DSelector.py --run-period 1801 --polarizations 0DEG,45DEG
     python swif2_Data_DSelector.py --run-period 2205 --polarizations 45DEG,135DEG --targets FULL,EMPTY
@@ -23,7 +23,8 @@ from pathlib import Path
 
 # Framework paths
 FRAMEWORK_DIR = Path(__file__).parent.resolve()
-DEFAULT_CONFIG = FRAMEWORK_DIR / "workflows_root_analysis.config"
+DEFAULT_CONFIG = FRAMEWORK_DIR / "data_dselector.config"
+LEGACY_DEFAULT_CONFIG = FRAMEWORK_DIR / "workflows_root_analysis.config"
 RUN_PERIODS_JSON = FRAMEWORK_DIR / "RunPeriods.json"
 BUNDLED_LAUNCH_SCRIPT = FRAMEWORK_DIR / "DSelector_Templates" / "launch.py"
 BUNDLED_SCRIPT_SH = FRAMEWORK_DIR / "DSelector_Templates" / "script.sh"
@@ -45,7 +46,7 @@ def default_log_base():
     return f"/farm_out/{current_username()}/DSelector_logs/RealDataDSelector/{{RunPeriod}}"
 
 def parse_config(config_path):
-    """Parse workflows_root_analysis.config file"""
+    """Parse data_dselector.config file"""
     config = {}
     
     if not config_path.exists():
@@ -348,6 +349,10 @@ def handle_existing_output(output_dir, mode, dry_run=False):
         return True
     
     message = f"    Existing output directory is non-empty: {output_dir}"
+    if dry_run:
+        print(f"{message}")
+        print("    DRY RUN NOTE: submit mode would apply the existing-output policy here")
+        return True
     if mode == 'allow':
         print(f"{message}")
         print("    Existing output mode: allow (new jobs may overwrite matching output files)")
@@ -579,9 +584,6 @@ def process_data_selection(config, run_periods_data, args):
                     print(f"    Skipping {run_period} {polarization}" + (f" {target_type}" if target_type else ""))
                     continue
                 
-                output_dir.mkdir(parents=True, exist_ok=True)
-                log_dir.mkdir(parents=True, exist_ok=True)
-                
                 # Get tree name from tree_type or config override
                 tree_name = config.get('TREE_NAME')
                 if not tree_name:
@@ -591,11 +593,18 @@ def process_data_selection(config, run_periods_data, args):
                 print(f"    Workflow: {workflow_name}")
                 print(f"    Output: {output_dir}")
                 
-                # Create job config file
-                job_config = create_job_config(
-                    output_dir, log_dir, workflow_name,
-                    mss_input_dir, dselector_path, tree_name, rcdb_query, config
-                )
+                job_config = output_dir / "jobs_root_analysis.config"
+                if dry_run:
+                    print(f"    DRY RUN: Would create output directory: {output_dir}")
+                    print(f"    DRY RUN: Would create log directory: {log_dir}")
+                    print(f"    DRY RUN: Would write job config: {job_config}")
+                else:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                    job_config = create_job_config(
+                        output_dir, log_dir, workflow_name,
+                        mss_input_dir, dselector_path, tree_name, rcdb_query, config
+                    )
                 
                 # Submit workflow
                 if submit_workflow(workflow_name, job_config, run_range, dry_run):
@@ -635,7 +644,7 @@ Examples:
   python swif2_Data_DSelector.py --dry-run
   
   # Use custom config
-  python swif2_Data_DSelector.py --config my_workflows.config
+  python swif2_Data_DSelector.py --config my_data_dselector.config
         """
     )
     
@@ -653,9 +662,14 @@ Examples:
                        help='Show what would be done without submitting')
     parser.add_argument('--verbose', action='store_true',
                        help='Print detailed information')
-    
+
     args = parser.parse_args()
-    
+
+    if args.config == DEFAULT_CONFIG and not args.config.exists() and LEGACY_DEFAULT_CONFIG.exists():
+        args.config = LEGACY_DEFAULT_CONFIG
+        print(f"WARNING: Using legacy default config name: {args.config}")
+        print(f"         Consider renaming it to: {DEFAULT_CONFIG.name}")
+
     # Load configuration
     try:
         print(f"Loading configuration from: {args.config}")
