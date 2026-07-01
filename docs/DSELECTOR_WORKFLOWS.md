@@ -27,7 +27,7 @@ python3 swif2_Data_DSelector.py --config my_dselector_data.config --dry-run
 
 The default config file is `data_dselector.config`. It configures only `swif2_Data_DSelector.py`; it is not used by the simulation DSelector wrapper. The config file is a simple `KEY=VALUE` file. It is not JSON.
 
-Older checkouts may have the legacy name `workflows_root_analysis.config`. The data tool still accepts that name if you pass it with `--config`, and it will use it as a fallback if `data_dselector.config` is missing, but new setup runs create the clearer `data_dselector.config` name.
+Older checkouts may have the legacy name `workflows_root_analysis.config`. The data tool still accepts that name if you pass it with `--config`, but it will not use it automatically because old files often contain stale absolute paths. New setup runs create the clearer `data_dselector.config` name.
 
 ### Minimal Config Example
 
@@ -50,7 +50,7 @@ EXISTING_OUTPUT_MODE=fail
 TIMELIMIT=8hrs
 CORES=1
 RAM=3GB
-DISK=100MB
+DISK=10GB
 SWIF2_ACCOUNT=halld
 SWIF2_PARTITION=production
 ```

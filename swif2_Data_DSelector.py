@@ -612,8 +612,15 @@ def process_data_selection(config, run_periods_data, args):
     
     # Summary
     print(f"\n{'='*70}")
-    print(f"Submission Summary:")
-    print(f"  Successful: {success_count}/{total_workflows} workflows")
+    if dry_run:
+        print("Dry Run Summary:")
+        print(f"  Previewed: {success_count}/{total_workflows} workflows")
+        print("  Submitted: 0 workflows")
+        print("  Files/directories created: none")
+        print("  Remove --dry-run, or set DRY_RUN=False in the config, to submit these workflows.")
+    else:
+        print("Submission Summary:")
+        print(f"  Submitted successfully: {success_count}/{total_workflows} workflows")
     print(f"{'='*70}\n")
     
     return success_count > 0
@@ -666,9 +673,11 @@ Examples:
     args = parser.parse_args()
 
     if args.config == DEFAULT_CONFIG and not args.config.exists() and LEGACY_DEFAULT_CONFIG.exists():
-        args.config = LEGACY_DEFAULT_CONFIG
-        print(f"WARNING: Using legacy default config name: {args.config}")
-        print(f"         Consider renaming it to: {DEFAULT_CONFIG.name}")
+        print(f"ERROR: Default config not found: {DEFAULT_CONFIG}")
+        print(f"Found legacy config: {LEGACY_DEFAULT_CONFIG}")
+        print("The legacy file is not used automatically because it may contain stale absolute paths.")
+        print(f"Create {DEFAULT_CONFIG.name} with ./setup_framework.py, or pass the legacy file explicitly with --config if you really want it.")
+        sys.exit(1)
 
     # Load configuration
     try:
