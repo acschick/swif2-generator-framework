@@ -7,6 +7,14 @@ This repository has two DSelector submission wrappers:
 
 They both submit SWIF2 workflows, but they take different kinds of configuration files.
 
+Run the framework setup once after cloning:
+
+```bash
+./setup_framework.py
+```
+
+Setup detects `$USER`, writes `framework_settings.json`, creates safe user-owned base directories when possible, and creates `workflows_root_analysis.config` if it does not already exist. The scripts also have `$USER`-aware defaults, so they no longer depend on hardcoded personal paths.
+
 ## Real Data: `swif2_Data_DSelector.py`
 
 Use this when you already have real data analysis trees, usually in `/mss/halld/...` or another shared tree directory, and want to submit one DSelector workflow per run-period/polarization/target combination.
@@ -32,8 +40,8 @@ ANALYSIS_VERSION_2205=ver01
 
 DSELECTOR_PATH=/Users/andrew/Documents/swif2-generator-framework/DSelector_Templates/2eMissingProton_Systematics/DSelector_2eMissingProton_Systematics.C
 
-OUTPUT_BASE_DIR=/volatile/halld/home/acschick/DSelectorData/{RunPeriod}
-LOG_BASE_DIR=/farm_out/acschick/DSelectorData/{RunPeriod}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/DSelectorData/{RunPeriod}
+LOG_BASE_DIR=/farm_out/{USERNAME}/DSelectorData/{RunPeriod}
 WORKFLOW_PREFIX=DSELECTOR_DATA
 EXISTING_OUTPUT_MODE=fail
 
@@ -65,27 +73,27 @@ The data tool builds output directories from `OUTPUT_BASE_DIR`, then appends the
 The default base paths are:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}
-LOG_BASE_DIR=/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis/{RunPeriod}
+LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealData/{RunPeriod}
 ```
 
 With those defaults, a GlueX run over `1801` and `0DEG` writes under:
 
 ```text
-/volatile/halld/home/acschick/RealDataAnalysis/1801/0DEG/
+/volatile/halld/home/$USER/RealDataAnalysis/1801/0DEG/
 ```
 
 For CPP with target splitting, `2205`, `45DEG`, and `FULL` writes under:
 
 ```text
-/volatile/halld/home/acschick/RealDataAnalysis/2205/45DEG/FULL/
+/volatile/halld/home/$USER/RealDataAnalysis/2205/45DEG/FULL/
 ```
 
 You can place the placeholders directly in the config if you want a different layout:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}/{Polarization}/{TargetType}
-LOG_BASE_DIR=/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}/{Polarization}/{TargetType}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis/{RunPeriod}/{Polarization}/{TargetType}
+LOG_BASE_DIR=/farm_out/{USERNAME}/DSelector_logs/RealData/{RunPeriod}/{Polarization}/{TargetType}
 ```
 
 If `{Polarization}` is not present in `OUTPUT_BASE_DIR`, the tool appends the polarization directory automatically. If `{TargetType}` is not present and target splitting is active, it appends the target directory automatically.
@@ -116,7 +124,7 @@ python3 swif2_Data_DSelector.py \
 The tool does not delete old output for you. If you want a clean rerun after changing a DSelector, the safest pattern is to change `OUTPUT_BASE_DIR` or `WORKFLOW_PREFIX`, for example:
 
 ```ini
-OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis_dselectorV2/{RunPeriod}
+OUTPUT_BASE_DIR=/volatile/halld/home/{USERNAME}/RealDataAnalysis_dselectorV2/{RunPeriod}
 WORKFLOW_PREFIX=DSELECTOR_DATA_V2
 ```
 
