@@ -110,7 +110,7 @@ def get_rcdb_query(run_period, polarization, run_periods_data):
             '45DEG': '45',
             '90DEG': '90',
             '135DEG': '135',
-            'AMO': '0'  # AMO uses 0 degree polarization angle
+            'AMO': '-1.0'  # AMO uses -1.0 degree polarization angle
         }
         
         pol_deg = pol_map.get(polarization, '0')
