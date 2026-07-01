@@ -11,6 +11,7 @@ Usage:
     python swif2_Data_DSelector.py --dry-run
     python swif2_Data_DSelector.py --run-period 1801 --polarizations 0DEG,45DEG
     python swif2_Data_DSelector.py --run-period 2205 --polarizations 45DEG,135DEG --targets FULL,EMPTY
+    python swif2_Data_DSelector.py --existing-output skip
 """
 
 import os
@@ -28,6 +29,7 @@ BUNDLED_LAUNCH_SCRIPT = FRAMEWORK_DIR / "DSelector_Templates" / "launch.py"
 BUNDLED_SCRIPT_SH = FRAMEWORK_DIR / "DSelector_Templates" / "script.sh"
 BUNDLED_RUN_SELECTOR = FRAMEWORK_DIR / "DSelector_Templates" / "Run_Selector.C"
 DEFAULT_ENVFILE = "/group/halld/www/halldweb/html/halld_versions/version.xml"
+EXISTING_OUTPUT_MODES = ('fail', 'skip', 'allow')
 
 
 def parse_config(config_path):
@@ -298,6 +300,48 @@ def get_polarizations_for_period(config, args, run_period, run_periods_data):
     return expand_list(pol_config, available_pols)
 
 
+def expand_path_template(path_template, run_period, polarization, target_type=None):
+    """Expand supported path placeholders for output and log directories."""
+    replacements = {
+        '{RunPeriod}': run_period,
+        '{run_period}': run_period,
+        '{Polarization}': polarization,
+        '{polarization}': polarization,
+        '{TargetType}': target_type or '',
+        '{target_type}': target_type or '',
+    }
+    expanded = str(path_template)
+    for placeholder, value in replacements.items():
+        expanded = expanded.replace(placeholder, value)
+    return expanded
+
+
+def directory_has_contents(directory):
+    """Return True if directory exists and contains any files or subdirectories."""
+    return directory.exists() and any(directory.iterdir())
+
+
+def handle_existing_output(output_dir, mode, dry_run=False):
+    """Apply the configured policy for a non-empty output directory."""
+    if not directory_has_contents(output_dir):
+        return True
+    
+    message = f"    Existing output directory is non-empty: {output_dir}"
+    if mode == 'allow':
+        print(f"{message}")
+        print("    Existing output mode: allow (new jobs may overwrite matching output files)")
+        return True
+    if mode == 'skip':
+        print(f"{message}")
+        print("    Existing output mode: skip")
+        return False
+    
+    print(f"{message}")
+    print("    Existing output mode: fail")
+    print("    Set EXISTING_OUTPUT_MODE=skip or allow, or pass --existing-output skip|allow, to continue intentionally.")
+    return False
+
+
 def create_job_config(output_dir, log_dir, workflow_name, input_dir, 
                      selector_path, tree_name, rcdb_query, config):
     """Create jobs_root_analysis.config for launch.py"""
@@ -411,10 +455,14 @@ def process_data_selection(config, run_periods_data, args):
     tree_type = config.get('TREE_TYPE', 'epemmissprot__B2_U1')
     dselector_path = Path(config.get('DSELECTOR_PATH', 
                           FRAMEWORK_DIR / 'DSelector_Templates' / '2eMissingProton_Systematics' / 'DSelector_2eMissingProton_Systematics.C'))
-    output_base = Path(config.get('OUTPUT_BASE_DIR', '/volatile/halld/home/acschick/RealDataAnalysis'))
-    log_base = Path(config.get('LOG_BASE_DIR', '/farm_out/acschick/DSelector_logs/RealData'))
+    output_base = Path(config.get('OUTPUT_BASE_DIR', '/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}'))
+    log_base = Path(config.get('LOG_BASE_DIR', '/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}'))
     workflow_prefix = config.get('WORKFLOW_PREFIX', 'DSELECTOR_DATA')
     dry_run = config.get('DRY_RUN', False) or args.dry_run
+    existing_output_mode = args.existing_output or config.get('EXISTING_OUTPUT_MODE', 'fail')
+    if existing_output_mode not in EXISTING_OUTPUT_MODES:
+        print(f"ERROR: EXISTING_OUTPUT_MODE must be one of: {', '.join(EXISTING_OUTPUT_MODES)}")
+        return False
     
     if not dselector_path.exists():
         print(f"ERROR: DSelector not found: {dselector_path}")
@@ -430,6 +478,7 @@ def process_data_selection(config, run_periods_data, args):
     print(f"  Tree Type: {tree_type}")
     print(f"  DSelector: {dselector_path.name}")
     print(f"  Output Base: {output_base}")
+    print(f"  Existing Output Mode: {existing_output_mode}")
     if dry_run:
         print(f"  DRY RUN MODE")
     print(f"{'='*70}\n")
@@ -492,12 +541,22 @@ def process_data_selection(config, run_periods_data, args):
                     workflow_parts.append(target_type)
                 workflow_name = "_".join(workflow_parts)
                 
-                # Create output directories (handle {RunPeriod} placeholder)
-                output_dir = Path(str(output_base).replace('{RunPeriod}', run_period)) / polarization
-                log_dir = Path(str(log_base).replace('{RunPeriod}', run_period)) / polarization
+                # Create output directories (handle placeholders)
+                output_dir = Path(expand_path_template(output_base, run_period, polarization, target_type))
+                log_dir = Path(expand_path_template(log_base, run_period, polarization, target_type))
+                if '{Polarization}' not in str(output_base) and '{polarization}' not in str(output_base):
+                    output_dir = output_dir / polarization
+                if '{Polarization}' not in str(log_base) and '{polarization}' not in str(log_base):
+                    log_dir = log_dir / polarization
                 if target_type:
-                    output_dir = output_dir / target_type
-                    log_dir = log_dir / target_type
+                    if '{TargetType}' not in str(output_base) and '{target_type}' not in str(output_base):
+                        output_dir = output_dir / target_type
+                    if '{TargetType}' not in str(log_base) and '{target_type}' not in str(log_base):
+                        log_dir = log_dir / target_type
+                
+                if not handle_existing_output(output_dir, existing_output_mode, dry_run):
+                    print(f"    Skipping {run_period} {polarization}" + (f" {target_type}" if target_type else ""))
+                    continue
                 
                 output_dir.mkdir(parents=True, exist_ok=True)
                 log_dir.mkdir(parents=True, exist_ok=True)
@@ -547,6 +606,9 @@ Examples:
 
   # Process CPP full and empty target data separately
   python swif2_Data_DSelector.py --run-period 2205 --polarizations 45DEG,135DEG --targets FULL,EMPTY
+
+  # Skip combinations with existing non-empty output directories
+  python swif2_Data_DSelector.py --existing-output skip
   
   # Dry run to preview
   python swif2_Data_DSelector.py --dry-run
@@ -564,6 +626,8 @@ Examples:
                        help='Comma-separated polarizations to process (overrides config)')
     parser.add_argument('--targets',
                        help='Comma-separated target types to process (e.g. FULL,EMPTY; overrides config)')
+    parser.add_argument('--existing-output', choices=EXISTING_OUTPUT_MODES,
+                       help='What to do when an output directory already has contents (default: config or fail)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be done without submitting')
     parser.add_argument('--verbose', action='store_true',

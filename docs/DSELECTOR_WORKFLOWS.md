@@ -35,6 +35,7 @@ DSELECTOR_PATH=/Users/andrew/Documents/swif2-generator-framework/DSelector_Templ
 OUTPUT_BASE_DIR=/volatile/halld/home/acschick/DSelectorData/{RunPeriod}
 LOG_BASE_DIR=/farm_out/acschick/DSelectorData/{RunPeriod}
 WORKFLOW_PREFIX=DSELECTOR_DATA
+EXISTING_OUTPUT_MODE=fail
 
 TIMELIMIT=8hrs
 CORES=1
@@ -56,6 +57,68 @@ python3 swif2_Data_DSelector.py \
 ```
 
 Remove `--dry-run` to submit.
+
+### Output Directories And Existing Output
+
+The data tool builds output directories from `OUTPUT_BASE_DIR`, then appends the polarization and, when active, the target type.
+
+The default base paths are:
+
+```ini
+OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}
+LOG_BASE_DIR=/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}
+```
+
+With those defaults, a GlueX run over `1801` and `0DEG` writes under:
+
+```text
+/volatile/halld/home/acschick/RealDataAnalysis/1801/0DEG/
+```
+
+For CPP with target splitting, `2205`, `45DEG`, and `FULL` writes under:
+
+```text
+/volatile/halld/home/acschick/RealDataAnalysis/2205/45DEG/FULL/
+```
+
+You can place the placeholders directly in the config if you want a different layout:
+
+```ini
+OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}/{Polarization}/{TargetType}
+LOG_BASE_DIR=/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}/{Polarization}/{TargetType}
+```
+
+If `{Polarization}` is not present in `OUTPUT_BASE_DIR`, the tool appends the polarization directory automatically. If `{TargetType}` is not present and target splitting is active, it appends the target directory automatically.
+
+The tool now checks for a non-empty output directory before writing the generated `jobs_root_analysis.config` or submitting jobs. Configure this with:
+
+```ini
+EXISTING_OUTPUT_MODE=fail
+```
+
+Valid modes are:
+
+| Mode | Behavior |
+| --- | --- |
+| `fail` | Default. Do not submit that combination if the output directory already has contents. |
+| `skip` | Skip that combination and continue with the rest. |
+| `allow` | Reuse the existing directory. The generated config may be overwritten, and matching DSelector output filenames may be overwritten by jobs. |
+
+You can override the mode on the command line:
+
+```bash
+python3 swif2_Data_DSelector.py \
+  --config my_dselector_data.config \
+  --existing-output skip \
+  --dry-run
+```
+
+The tool does not delete old output for you. If you want a clean rerun after changing a DSelector, the safest pattern is to change `OUTPUT_BASE_DIR` or `WORKFLOW_PREFIX`, for example:
+
+```ini
+OUTPUT_BASE_DIR=/volatile/halld/home/acschick/RealDataAnalysis_dselectorV2/{RunPeriod}
+WORKFLOW_PREFIX=DSELECTOR_DATA_V2
+```
 
 ### `RunPeriods.json` Requirements
 
