@@ -455,7 +455,7 @@ def process_data_selection(config, run_periods_data, args):
     tree_type = config.get('TREE_TYPE', 'epemmissprot__B2_U1')
     dselector_path = Path(config.get('DSELECTOR_PATH', 
                           FRAMEWORK_DIR / 'DSelector_Templates' / '2eMissingProton_Systematics' / 'DSelector_2eMissingProton_Systematics.C'))
-    output_base = Path(config.get('OUTPUT_BASE_DIR', '/volatile/halld/home/acschick/RealDataAnalysis/{RunPeriod}'))
+    output_base = Path(config.get('OUTPUT_BASE_DIR', '/volatile/halld/home/acschick/DataAnalysis/{RunPeriod}'))
     log_base = Path(config.get('LOG_BASE_DIR', '/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}'))
     workflow_prefix = config.get('WORKFLOW_PREFIX', 'DSELECTOR_DATA')
     dry_run = config.get('DRY_RUN', False) or args.dry_run
