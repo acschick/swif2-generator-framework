@@ -38,12 +38,11 @@ def current_username():
 
 
 def default_output_base():
-    return f"/volatile/halld/home/{current_username()}/RealDataAnalysis/{{RunPeriod}}"
+    return f"/volatile/halld/home/{current_username()}/RealDataDSelector/{{RunPeriod}}"
 
 
 def default_log_base():
-    return f"/farm_out/{current_username()}/DSelector_logs/RealData/{{RunPeriod}}"
-
+    return f"/farm_out/{current_username()}/DSelector_logs/RealDataDSelector/{{RunPeriod}}"
 
 def parse_config(config_path):
     """Parse workflows_root_analysis.config file"""
