@@ -32,6 +32,19 @@ DEFAULT_ENVFILE = "/group/halld/www/halldweb/html/halld_versions/version.xml"
 EXISTING_OUTPUT_MODES = ('fail', 'skip', 'allow')
 
 
+def current_username():
+    """Return the current JLab/CUE username when available."""
+    return os.environ.get('USER') or os.environ.get('USERNAME') or 'unknown_user'
+
+
+def default_output_base():
+    return f"/volatile/halld/home/{current_username()}/RealDataAnalysis/{{RunPeriod}}"
+
+
+def default_log_base():
+    return f"/farm_out/{current_username()}/DSelector_logs/RealData/{{RunPeriod}}"
+
+
 def parse_config(config_path):
     """Parse workflows_root_analysis.config file"""
     config = {}
@@ -55,6 +68,15 @@ def parse_config(config_path):
                     value = value.upper() == 'TRUE'
                 
                 config[key] = value
+    
+    username = current_username()
+    for key, value in list(config.items()):
+        if isinstance(value, str):
+            config[key] = (
+                value.replace('{USERNAME}', username)
+                     .replace('{USER}', username)
+                     .replace('{FRAMEWORK_HOME}', str(FRAMEWORK_DIR))
+            )
     
     return config
 
@@ -455,8 +477,8 @@ def process_data_selection(config, run_periods_data, args):
     tree_type = config.get('TREE_TYPE', 'epemmissprot__B2_U1')
     dselector_path = Path(config.get('DSELECTOR_PATH', 
                           FRAMEWORK_DIR / 'DSelector_Templates' / '2eMissingProton_Systematics' / 'DSelector_2eMissingProton_Systematics.C'))
-    output_base = Path(config.get('OUTPUT_BASE_DIR', '/volatile/halld/home/acschick/DataAnalysis/{RunPeriod}'))
-    log_base = Path(config.get('LOG_BASE_DIR', '/farm_out/acschick/DSelector_logs/RealData/{RunPeriod}'))
+    output_base = Path(config.get('OUTPUT_BASE_DIR', default_output_base()))
+    log_base = Path(config.get('LOG_BASE_DIR', default_log_base()))
     workflow_prefix = config.get('WORKFLOW_PREFIX', 'DSELECTOR_DATA')
     dry_run = config.get('DRY_RUN', False) or args.dry_run
     existing_output_mode = args.existing_output or config.get('EXISTING_OUTPUT_MODE', 'fail')

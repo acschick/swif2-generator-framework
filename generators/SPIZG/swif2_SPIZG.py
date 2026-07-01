@@ -92,7 +92,7 @@ def load_config(config_file="SPIZG.config"):
     # Second pass: resolve variable substitutions like {USERNAME}
     for key, value in config.items():
         if isinstance(value, str) and '{' in value and '}' in value:
-            resolved_value = value
+            resolved_value = value.replace('{USER}', os.getenv('USER', 'unknown_user'))
             for var_key, var_value in config.items():
                 if isinstance(var_value, str):
                     resolved_value = resolved_value.replace(f'{{{var_key}}}', str(var_value))
@@ -104,8 +104,8 @@ def load_config(config_file="SPIZG.config"):
 
 def load_run_periods(json_path="RunPeriods.json"):
     """Load RunPeriods.json for automatic configuration."""
-    script_dir = os.path.dirname(__file__)
-    full_path = os.path.join(script_dir, json_path)
+    framework_home = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    full_path = os.path.join(framework_home, json_path)
     
     if not os.path.exists(full_path):
         print(f"Warning: {json_path} not found. Automatic lookups disabled.")
@@ -118,7 +118,8 @@ def load_run_periods(json_path="RunPeriods.json"):
 def get_cobrems_file(run_period, polarization, run_periods_data):
     """Get coherent bremsstrahlung distribution file from RunPeriods.json."""
     try:
-        return run_periods_data[run_period]['Polarizations'][polarization]['cobrems_distribution']
+        path = run_periods_data[run_period]['Polarizations'][polarization]['cobrems_distribution']
+        return path.replace("{FRAMEWORK_HOME}", FRAMEWORK_HOME)
     except KeyError:
         return None
 
@@ -166,7 +167,8 @@ def replace_path_placeholders(path_string, generator_type, username, framework_h
 #############################################################################
 
 # Directory setup
-FRAMEWORK_HOME = get_config("FRAMEWORK_HOME", os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+config_framework_home = get_config("FRAMEWORK_HOME", "")
+FRAMEWORK_HOME = config_framework_home or os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 TEMPLATE_DIR = os.path.join(FRAMEWORK_HOME, "generators", "SPIZG", "template_SPIZG")
 USERNAME = get_config("USERNAME", os.environ.get("USER", "user"))
 
@@ -201,7 +203,7 @@ LOG_DIR_BASE = replace_path_placeholders(
 ENV_FILE = get_config("ENV_FILE", "/group/halld/www/halldweb/html/halld_versions/version.xml")
 JOB_SCRIPT = get_config("JOB_SCRIPT", "swif2_SPIZG_script.sh")
 # ascii2hddm.py is centralized in hddm_scripts/
-ASCII2HDDM_SCRIPT = os.path.join(FrameworkHomeDirectory, "hddm_scripts", "ascii2hddm.py")
+ASCII2HDDM_SCRIPT = os.path.join(FRAMEWORK_HOME, "hddm_scripts", "ascii2hddm.py")
 
 # SWIF2 job control
 PROJECT = get_config("PROJECT", "halld")

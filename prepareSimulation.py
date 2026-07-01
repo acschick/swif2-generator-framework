@@ -741,7 +741,7 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         
         username = extract_config_value(config_data,
             ['rbhg_config.user_settings.username', 'username', 'user_settings.username'],
-            os.environ.get('USER', 'acschick'))
+            os.environ.get('USER', 'unknown_user'))
         
         # Use the actual event count from the merged HDDM file (passed as parameter)
         # This is the true count after filtering empty files, not the expected count
@@ -1175,7 +1175,7 @@ ANA_OS=CENTOS7"""
                 farm_out_base = f"/farm_out/{username}/{generator_type}/{study_name}"
 
             # Log dir should be unique per workflow to avoid log file conflicts
-            # Use workflow_name as the subdirectory (e.g., /farm_out/acschick/RBHG/FFS1/SIM_FFS1_BCFFN_1801_0DEG_ee/)
+            # Use workflow_name as the subdirectory (e.g., /farm_out/$USER/RBHG/FFS1/SIM_FFS1_BCFFN_1801_0DEG_ee/)
             logdir = os.path.join(farm_out_base, workflow_name)
             # Ensure trailing slash for readability in configs
             if not logdir.endswith('/'):

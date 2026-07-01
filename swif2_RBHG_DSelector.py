@@ -26,6 +26,60 @@ FRAMEWORK_DIR = Path(__file__).parent.resolve()
 
 # Central DSelector location (relative to framework)
 CENTRAL_DSELECTOR_PATH = str(FRAMEWORK_DIR / 'DSelector_Templates' / '2eMissingProton_Systematics' / 'DSelector_2eMissingProton_Systematics.C')
+DEFAULT_LAUNCH_SCRIPT = str(FRAMEWORK_DIR / 'DSelector_Templates' / 'launch.py')
+DEFAULT_SCRIPT_SH = str(FRAMEWORK_DIR / 'DSelector_Templates' / 'script.sh')
+DEFAULT_RUN_SELECTOR = str(FRAMEWORK_DIR / 'DSelector_Templates' / 'Run_Selector.C')
+DEFAULT_ENVFILE = "/group/halld/www/halldweb/html/halld_versions/version.xml"
+
+
+def current_username():
+    """Return the current JLab/CUE username when available."""
+    return os.environ.get('USER') or os.environ.get('USERNAME') or 'unknown_user'
+
+
+def load_framework_settings():
+    """Load optional setup-generated settings."""
+    settings_path = FRAMEWORK_DIR / 'framework_settings.json'
+    if not settings_path.exists():
+        return {}
+    try:
+        with open(settings_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"  WARNING: Could not read {settings_path}: {e}")
+        return {}
+
+
+FRAMEWORK_SETTINGS = load_framework_settings()
+
+
+def setting(name, default=None):
+    env_name = f"SWIF2_GF_{name.upper()}"
+    return os.environ.get(env_name) or FRAMEWORK_SETTINGS.get(name, default)
+
+
+def volatile_base(username=None):
+    return setting('volatile_base', f"/volatile/halld/home/{username or current_username()}")
+
+
+def farm_out_base(username=None):
+    return setting('farm_out_base', f"/farm_out/{username or current_username()}")
+
+
+def root_analysis_launch_script():
+    return setting('root_analysis_launch_script', DEFAULT_LAUNCH_SCRIPT)
+
+
+def root_analysis_scriptfile():
+    return setting('root_analysis_scriptfile', DEFAULT_SCRIPT_SH)
+
+
+def root_analysis_rootscript():
+    return setting('root_analysis_rootscript', DEFAULT_RUN_SELECTOR)
+
+
+def root_analysis_envfile():
+    return setting('root_analysis_envfile', DEFAULT_ENVFILE)
 
 # Import utilities if available
 try:
@@ -225,8 +279,15 @@ def process_individual_directory(config_path, dselector_path, dry_run=False, mod
     radiation_mode = extract_config_value(config_data,
         ['rbhg_config.physics_settings.radiation_mode', 'radiation_mode'], 'DBLRAD')
     
+    username = extract_config_value(config_data,
+        ['rbhg_config.user_settings.username',
+         'rbhg_config.directory_paths.base_paths.username',
+         'username',
+         'user_settings.username'],
+        setting('username', current_username()))
+    
     # Construct path components (always needed for log dirs)
-    base_output = f"/volatile/halld/home/acschick/RBHG/{study_name}"
+    base_output = os.path.join(volatile_base(username), "RBHG", study_name)
     actual_dir_name = f"{run_period}_{polarization}_{form_factor}_{radiation_mode}"
     
     # If input_trees_dir doesn't exist, try to construct the actual path from MCWrapper output
@@ -312,7 +373,7 @@ def process_individual_directory(config_path, dselector_path, dry_run=False, mod
     os.makedirs(output_dir, exist_ok=True)
     
     # Create log directory on /farm_out (not /volatile)
-    log_dir = f"/farm_out/acschick/DSelector_logs/{study_name}/{nametag_ff_combined}/{actual_dir_name}"
+    log_dir = os.path.join(farm_out_base(username), "DSelector_logs", study_name, nametag_ff_combined, actual_dir_name)
     os.makedirs(log_dir, exist_ok=True)
     print(f"  Log directory: {log_dir}")
     
@@ -409,11 +470,11 @@ RAM                3GB
 TIMELIMIT          {time_limit}
 
 # JOB CONTROL
-ENVFILE            /work/halld/home/acschick/channels/batch_submission/2026launch/launch_scripts/launch/version_7.5.0.xml
-SCRIPTFILE         /work/halld/home/acschick/channels/batch_submission/2026launch/launch_scripts/root_analysis/script.sh
+ENVFILE            {root_analysis_envfile()}
+SCRIPTFILE         {root_analysis_scriptfile()}
 
 # ROOT CONFIG
-ROOT_SCRIPT        /work/halld/home/acschick/channels/batch_submission/2026launch/launch_scripts/root_analysis/Run_Selector.C
+ROOT_SCRIPT        {root_analysis_rootscript()}
 TREE_NAME          {tree_name}
 """
     
@@ -437,8 +498,8 @@ def submit_dselector_workflow(workflow_name, config_file, dry_run=False):
             return False
     
     # Add jobs using launch script
-    launch_script = "/work/halld/home/acschick/channels/batch_submission/2026launch/launch_scripts/launch/launch.py"
-    cmd_add = f"{launch_script} {config_file} 40000 57000"
+    launch_script = root_analysis_launch_script()
+    cmd_add = f"python3 {launch_script} {config_file} 40000 57000"
     print(f"  Adding jobs: {cmd_add}")
     print()  # Blank line before launch.py output
     

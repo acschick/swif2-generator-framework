@@ -87,7 +87,7 @@ def load_config(config_file="RBHG.config"):
     for key, value in config.items():
         if isinstance(value, str) and '{' in value and '}' in value:
             # Simple variable substitution
-            resolved_value = value
+            resolved_value = value.replace('{USER}', os.getenv('USER', 'unknown_user'))
             for var_key, var_value in config.items():
                 if isinstance(var_value, str):
                     resolved_value = resolved_value.replace(f'{{{var_key}}}', str(var_value))
@@ -125,6 +125,13 @@ else:
 # - HDDM scripts: {FrameworkHomeDirectory}/hddm_scripts/
 RBHGHomeDirectory = FrameworkHomeDirectory  # For compatibility with old code
 
+
+def resolve_framework_path(path_value):
+    """Resolve framework-local placeholders in paths loaded from shared metadata."""
+    if not isinstance(path_value, str):
+        return path_value
+    return path_value.replace("{FRAMEWORK_HOME}", FrameworkHomeDirectory)
+
 # Template files and scripts (relative paths will be joined with template_directory)
 #####################################################################################
 ## a.) The template file version that will be edited and compiled into an .exe:
@@ -143,7 +150,7 @@ ENVFILE = get_config("ENV_FILE", "/group/halld/www/halldweb/html/halld_versions/
 # but *it is* now that we are using hddm_s to make an hddm file.
 
 # JLAB CUE username:
-CUEusername = get_config("USERNAME", "acschick")
+CUEusername = get_config("USERNAME", os.getenv("USER", "unknown_user"))
 
 presimStudy = get_config("PRESIM_STUDY", False)                     # theta min changes from 0.75 deg to 1.5 deg
 coherentPeakStudy = get_config("COHERENT_PEAK_STUDY", False)                # Sets E0 inside coherent peak range (8.2, 8.8) #edit this for CPP
@@ -462,7 +469,7 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
         gen_output_parent = os.path.dirname(directories['output_directory'])
         
         # Process each output directory configuration
-        mcwrapper_base = get_config("MCWRAPPER_OUTPUT_DIR_BASE", "/volatile/halld/home/acschick/RBHG/")
+        mcwrapper_base = get_config("MCWRAPPER_OUTPUT_DIR_BASE", f"/volatile/halld/home/{CUEusername}/RBHG/")
         dselector_base = get_config("DSELECTOR_OUTPUT_DIR_BASE", "SIBLING")
         tmva_base = get_config("TMVA_OUTPUT_DIR_BASE", "SIBLING")
         
@@ -574,7 +581,7 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
             "directory_paths": {
                 "base_paths": {
                     "rbhg_home": os.path.dirname(os.path.dirname(os.path.dirname(directories['template_directory']))) if directories else None,  # Framework root (3 levels up from template_RBHG)
-                    "farm_out_base": f"/farm_out/{os.getenv('USER', 'acschick')}/RBHG/{study_name}" if directories else None,
+                    "farm_out_base": f"/farm_out/{CUEusername}/RBHG/{study_name}" if directories else None,
                     "output_base": os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(directories['template_directory']))), "output/RBHG") if directories else None  # Framework root + output/RBHG
                 },
                 "workflow_name": f"{study_name}_{nametag}_{form_factor}_{PolDeg}DEG_{lepton}" if directories else None,
@@ -1325,7 +1332,7 @@ def make_all_gen_directories(RBHGHomeDirectory, gen_dir_name, CUEusername, logic
                 if base_period in runperiods_data:
                     period_data = runperiods_data[base_period]
                     if "Polarizations" in period_data and pol_key in period_data["Polarizations"]:
-                        cobrems_path = period_data["Polarizations"][pol_key].get("cobrems_distribution", "")
+                        cobrems_path = resolve_framework_path(period_data["Polarizations"][pol_key].get("cobrems_distribution", ""))
                         if cobrems_path:
                             cobrems_source_path = cobrems_path
                             print(f"Using cobrems file from RunPeriods.json ({base_period}/{pol_key}): {cobrems_source_path}")
@@ -2249,8 +2256,5 @@ elif needs_run_period_master and run_period_master_files:
     for file in run_period_master_files:
         rel_path = file.replace(outputDirectoryTop + '/', '')
         print(f"  python prepareSimulation.py --run-period-config {rel_path}")
-
-
-
 
 

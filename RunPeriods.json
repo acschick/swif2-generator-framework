@@ -29,27 +29,27 @@
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 30327,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_30327_0deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_30327_0deg_rcdb.dat",
         "epem_event_count": "3000000"
       },
       "90DEG": {
         "characteristic_run": 30891,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_30891_90deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_30891_90deg_rcdb.dat",
         "epem_event_count": "3000000"
       },
       "135DEG": {
         "characteristic_run": 30480,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_30480_135deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_30480_135deg_rcdb.dat",
         "epem_event_count": "3000000"
       },
       "45DEG": {
         "characteristic_run": 30484,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_30484_45deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_30484_45deg_rcdb.dat",
         "epem_event_count": "3000000"
       },
       "AMO": {
         "characteristic_run": 30888,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_30888_AMO_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_30888_AMO_rcdb.dat",
         "epem_event_count": "3000000"
       }
     }
@@ -67,7 +67,7 @@
     "background_version": "Random:recon-2018_01-ver02.2",
     "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg})",
     "batch_system": "swif2cont",
-    "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
+    "jana_epem_config": "jana_ReactionFilter_trees.config",
     "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
     "tape_analysisTrees_paths": {
       "DATA": {
@@ -79,31 +79,31 @@
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 42559,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_42559_0deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_42559_0deg_rcdb.dat",
         "total_triggers": "33800000000",
         "epem_event_count": "6650000"
       },
       "90DEG": {
         "characteristic_run": 41541,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_41541_90deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_41541_90deg_rcdb.dat",
         "total_triggers": "34500000000",
         "epem_event_count": "6750000"
       },
       "135DEG": {
         "characteristic_run": 41172,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_41172_135deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_41172_135deg_rcdb.dat",
         "total_triggers": "33300000000",
         "epem_event_count": "6550000"
       },
       "45DEG": {
         "characteristic_run": 41425,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_41425_45deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_41425_45deg_rcdb.dat",
         "total_triggers": "32000000000",
         "epem_event_count": "6250000"
       },
       "AMO": {
         "characteristic_run": 42554,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_42554_AMO_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_42554_AMO_rcdb.dat",
         "total_triggers": "12400000000",
         "epem_event_count": "2450000"
       }
@@ -121,7 +121,7 @@
     "background_version": "Random:recon-2018_08-ver02.2",
     "RCDB_query": "@is_2018production and @status_approved and (polarization_angle=={polDeg}) and beam_on_current>49",
     "batch_system": "swif2cont",
-    "jana_epem_config": "/work/halld/home/acschick/channels/epemmissprot/newRBHG/RBHG/template_MCWrapper/jana_configs/jana_ReactionFilter_trees.config",
+    "jana_epem_config": "jana_ReactionFilter_trees.config",
     "trigger_to_event_conversion": "NOTE: Total triggers divided by ~5100 gives approximate observed event count after reconstruction and analysis cuts. Event counts rounded to nearest 50k for convenience.",
     "tape_analysisTrees_paths": {
       "DATA": {
@@ -133,31 +133,31 @@
     "Polarizations": {
       "0DEG": {
         "characteristic_run": 51038,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_51038_0deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_51038_0deg_rcdb.dat",
         "total_triggers": "18760000000",
         "epem_event_count": "3700000"
       },
       "90DEG": {
         "characteristic_run": 50699,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_50699_90deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_50699_90deg_rcdb.dat",
         "total_triggers": "18070000000",
         "epem_event_count": "3550000"
       },
       "135DEG": {
         "characteristic_run": 51233,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_51233_135deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_51233_135deg_rcdb.dat",
         "total_triggers": "16900000000",
         "epem_event_count": "3300000"
       },
       "45DEG": {
         "characteristic_run": 51056,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_51056_45deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_51056_45deg_rcdb.dat",
         "total_triggers": "16860000000",
         "epem_event_count": "3300000"
       },
       "AMO": {
         "characteristic_run": 51029,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_51029_AMO_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_51029_AMO_rcdb.dat",
         "total_triggers": "9590000000",
         "epem_event_count": "1900000"
       }
@@ -188,17 +188,17 @@
     "Polarizations": {
       "135DEG": {
         "characteristic_run": 101582,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101582_135deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_101582_135deg_rcdb.dat",
         "epem_event_count": "4000000"
       },
       "45DEG": {
         "characteristic_run": 101586,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101586_45deg_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_101586_45deg_rcdb.dat",
         "epem_event_count": "4000000"
       },
       "AMO": {
         "characteristic_run": 101615,
-        "cobrems_distribution": "/w/halld-scshelf2101/home/acschick/channels/swif2-generator-framework/generators/CobremsDistributions/cbrem_101615_AMO_rcdb.dat",
+        "cobrems_distribution": "{FRAMEWORK_HOME}/generators/CobremsDistributions/cbrem_101615_AMO_rcdb.dat",
         "epem_event_count": "4000000"
       }
     }
