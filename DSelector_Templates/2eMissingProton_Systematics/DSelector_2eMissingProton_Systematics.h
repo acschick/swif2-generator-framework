@@ -221,6 +221,8 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 		TH1D* dHist_theta1_fidCuts_noTheta[kNumMethods][kNumPid];
 		TH1D* dHist_theta2_noCuts[kNumMethods][kNumPid];
 		TH1D* dHist_theta2_fidCuts_noTheta[kNumMethods][kNumPid];
+		TH1D* dHist_theta1_angles[kNumMethods][kNumPid][kNumAngles];
+		TH1D* dHist_theta2_angles[kNumMethods][kNumPid][kNumAngles];
 		TH1D* dHist_JTphi_angles[kNumMethods][kNumPid][kNumAngles];
 		TH1D* dHist_JTphi_FID_2DCutOFF[kNumMethods][kNumPid];
 		TH1D* dHist_q2kin_angles[kNumMethods][kNumPid][kNumAngles];
@@ -553,6 +555,8 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 			TH2D* theta2_vs_theta1 = nullptr;
 			TH1D* ep_Pmag = nullptr;
 			TH1D* em_Pmag = nullptr;
+			TH1D* ef_x1 = nullptr;
+			TH1D* ef_x2 = nullptr;
 			TH1D* JTphi[kNumRunPeriods][nPolarizations] = {{nullptr}};
 			TH1D* ep_phi[kNumRunPeriods][nPolarizations] = {{nullptr}};
 			TH1D* em_phi[kNumRunPeriods][nPolarizations] = {{nullptr}};

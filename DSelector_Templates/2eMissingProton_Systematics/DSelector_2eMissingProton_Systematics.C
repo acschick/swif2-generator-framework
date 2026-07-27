@@ -351,6 +351,8 @@ void DSelector_2eMissingProton_Systematics::Init(TTree *locTree)
 		histSet.theta2_vs_theta1 = new TH2D("theta2_vs_theta1", ";lab #theta_{1} (deg);lab #theta_{2} (deg)", 100, 0, 15, 100, 0, 15);
 		histSet.ep_Pmag = new TH1D("ep_Pmag", ";|#vec{p}_{e^{+}}| (GeV/c)", 100, 0, 10);
 		histSet.em_Pmag = new TH1D("em_Pmag", ";|#vec{p}_{e^{-}}| (GeV/c)", 100, 0, 10);
+		histSet.ef_x1 = new TH1D("ef_x1", ";E_{1}/E_{#gamma}", 100, 0.0, 1.0);
+		histSet.ef_x2 = new TH1D("ef_x2", ";E_{2}/E_{#gamma}", 100, 0.0, 1.0);
 		for(int runPeriodIndex = 0; runPeriodIndex < kNumRunPeriods; ++runPeriodIndex) {
 			for(int polIndex = 0; polIndex < nPolarizations; ++polIndex) {
 				histSet.JTphi[runPeriodIndex][polIndex] = new TH1D(
@@ -1453,6 +1455,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 		double theta_minus_deg = locNegativeP4.Theta()*TMath::RadToDeg();
 		double pkin_plus = locPositiveP4.Vect().Mag();
 		double pkin_minus = locNegativeP4.Vect().Mag();
+		double ef_x1 = (locBeamP4.E() > 0.0) ? locPositiveP4.E()/locBeamP4.E() : 0.0;
+		double ef_x2 = (locBeamP4.E() > 0.0) ? locNegativeP4.E()/locBeamP4.E() : 0.0;
 		double deltaEfcalKinfit_plus = FCAL_Energy_plus - locPositiveP4.E();
 		double deltaEfcalKinfit_minus = FCAL_Energy_minus - locNegativeP4.E();
 		double kinRes_plus_abs = fabs(FCAL_kin_res_plus);
@@ -1770,6 +1774,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				histSet.theta2_vs_theta1->Fill(theta_plus_deg, theta_minus_deg, AccWeight);
 				histSet.ep_Pmag->Fill(pkin_plus, AccWeight);
 				histSet.em_Pmag->Fill(pkin_minus, AccWeight);
+				histSet.ef_x1->Fill(ef_x1, AccWeight);
+				histSet.ef_x2->Fill(ef_x2, AccWeight);
 				histSet.RecoilThetaVsP->Fill(locRecoilP4.Vect().Mag(), locRecoilP4.Theta()*TMath::RadToDeg(), AccWeight);
 
 				if(activeRunPeriodIndex >= 0 && activePolarizationIndex >= 0) {
@@ -1999,6 +2005,8 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 				histSet.theta2_vs_theta1->Fill(theta_plus_deg, theta_minus_deg);
 				histSet.ep_Pmag->Fill(pkin_plus);
 				histSet.em_Pmag->Fill(pkin_minus);
+				histSet.ef_x1->Fill(ef_x1);
+				histSet.ef_x2->Fill(ef_x2);
 				histSet.RecoilThetaVsP->Fill(locRecoilP4.Vect().Mag(), locRecoilP4.Theta()*TMath::RadToDeg());
 				
 				// Fill polarization-dependent histograms
@@ -2692,6 +2700,14 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 			}
 
 			for (int k = 0; k < kNumAngles; k++) {
+				thetaSysDir->cd();
+				dHist_theta1_angles[i][j][k] = new TH1D(
+					Form("theta1_%s_%s_thetaCut_%.2f", dMethods[i], dPidChoices[j], dMinAngles[k]),
+					";lab #theta_{1} (deg)", 100, 0, 15);
+				dHist_theta2_angles[i][j][k] = new TH1D(
+					Form("theta2_%s_%s_thetaCut_%.2f", dMethods[i], dPidChoices[j], dMinAngles[k]),
+					";lab #theta_{2} (deg)", 100, 0, 15);
+
 				phiJTDir->cd();
 				dHist_JTphi_angles[i][j][k] = new TH1D(
 					Form("JTphi_%s_%s_thetaCut_%.2f", dMethods[i], dPidChoices[j], dMinAngles[k]),
@@ -3292,6 +3308,8 @@ void DSelector_2eMissingProton_Systematics::FillSystematics(const ComboCutInputs
 					dHist_JTphi_angles[i][j][k]->Fill(JTphi, fillWeight);
 				setQ2BeamWindow(conditions);
 				if (ComboPassesCuts(inputs, conditions)) {
+					dHist_theta1_angles[i][j][k]->Fill(inputs.theta1, fillWeight);
+					dHist_theta2_angles[i][j][k]->Fill(inputs.theta2, fillWeight);
 					dHist_q2kin_angles[i][j][k]->Fill(q2kin, fillWeight);
 					dHist_q2kin_varWidth_angles[i][j][k]->Fill(q2kin, fillWeight);
 					if(fillQ2ResSystematics)
