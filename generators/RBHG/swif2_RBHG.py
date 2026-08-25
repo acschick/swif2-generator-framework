@@ -132,6 +132,74 @@ def resolve_framework_path(path_value):
         return path_value
     return path_value.replace("{FRAMEWORK_HOME}", FrameworkHomeDirectory)
 
+
+def resolve_input_path(path_value):
+    """Resolve an absolute or framework-relative input path."""
+    resolved = resolve_framework_path(path_value)
+    if os.path.isabs(resolved):
+        return resolved
+    return os.path.join(FrameworkHomeDirectory, resolved)
+
+
+def load_flux_binning_scheme(path_value):
+    """Load a reusable RBHG flux-study energy scheme without exclusions.
+
+    Data rows use: DETECTOR COUNTER E_CENTER_GEV. Comment metadata may use
+    ``# key: value``.
+    """
+    scheme_path = resolve_input_path(path_value)
+    if not os.path.exists(scheme_path):
+        raise FileNotFoundError(f"Flux binning scheme not found: {scheme_path}")
+
+    metadata = {}
+    counters = {"TAGH": [], "TAGM": []}
+    with open(scheme_path, "r") as scheme_file:
+        for line_number, raw_line in enumerate(scheme_file, 1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                if ":" in line:
+                    key, value = line[1:].split(":", 1)
+                    metadata[key.strip().lower().replace(" ", "_")] = value.strip()
+                continue
+
+            fields = line.split()
+            if len(fields) != 3:
+                raise ValueError(
+                    f"Invalid flux scheme row {line_number} in {scheme_path}: {raw_line.rstrip()}"
+                )
+            detector = fields[0].upper()
+            if detector not in counters:
+                raise ValueError(f"Unknown detector '{fields[0]}' on row {line_number}")
+            counters[detector].append({
+                "detector": detector,
+                "counter": int(fields[1]),
+                "energy_center_GeV": float(fields[2])
+            })
+
+    expected_counts = {"TAGH": 274, "TAGM": 102}
+    for detector, rows in counters.items():
+        ids = [row["counter"] for row in rows]
+        expected_ids = list(range(1, expected_counts[detector] + 1))
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"Duplicate {detector} counter IDs in {scheme_path}")
+        if sorted(ids) != expected_ids:
+            raise ValueError(
+                f"{detector} scheme must contain counters 1-{expected_counts[detector]} exactly once; "
+                f"found {len(ids)} rows"
+            )
+        rows.sort(key=lambda row: row["counter"])
+
+    return {"path": scheme_path, "metadata": metadata, "counters": counters}
+
+
+def parse_flux_tagger_systems(value):
+    systems = [item.strip().upper() for item in re.split(r"[,;]", value) if item.strip()]
+    if not systems or any(item not in {"TAGH", "TAGM"} for item in systems):
+        raise ValueError("FLUX_TAGGER_SYSTEMS must contain TAGH, TAGM, or TAGH,TAGM")
+    return list(dict.fromkeys(systems))
+
 # Template files and scripts (relative paths will be joined with template_directory)
 #####################################################################################
 ## a.) The template file version that will be edited and compiled into an .exe:
@@ -154,6 +222,18 @@ CUEusername = get_config("USERNAME", os.getenv("USER", "unknown_user"))
 
 presimStudy = get_config("PRESIM_STUDY", False)                     # theta min changes from 0.75 deg to 1.5 deg
 coherentPeakStudy = get_config("COHERENT_PEAK_STUDY", False)                # Sets E0 inside coherent peak range (8.2, 8.8) #edit this for CPP
+fluxStudy = get_config("FLUX_STUDY", False)
+FLUX_BINNING_SCHEME = get_config(
+    "FLUX_BINNING_SCHEME", ""
+)
+FLUX_ENERGY_HALF_WIDTH_MEV = float(get_config("FLUX_ENERGY_HALF_WIDTH_MEV", 0.05))
+FLUX_EVENTS_PER_COUNTER = int(get_config("FLUX_EVENTS_PER_COUNTER", 50000))
+FLUX_TAGGER_SYSTEMS = str(get_config("FLUX_TAGGER_SYSTEMS", "TAGH,TAGM"))
+
+if FLUX_ENERGY_HALF_WIDTH_MEV <= 0:
+    raise ValueError("FLUX_ENERGY_HALF_WIDTH_MEV must be positive")
+if FLUX_EVENTS_PER_COUNTER <= 0:
+    raise ValueError("FLUX_EVENTS_PER_COUNTER must be positive")
 
 # Event count matching
 FIXED_EVENT_COUNT = get_config("FIXED_EVENT_COUNT", True)                # Override automatic event counts to use specific fixed values
@@ -651,6 +731,9 @@ def determine_study_type(RUN_PERIOD, study_name):
     Future: Completely different study types (ECAL, etc.) will use different 
     configuration systems, not RUN_PERIOD extensions.
     """
+    if fluxStudy:
+        return "Flux Study"
+
     if not RUN_PERIOD:
         return study_name
     
@@ -886,6 +969,17 @@ def load_runperiods_data(run_period, polarization, rbhg_home_dir):
     except Exception as e:
         print(f"Warning: Error loading RunPeriods.json: {e}")
         return None
+
+
+def load_runperiod_flux_scheme(run_period, rbhg_home_dir):
+    """Return the run-period-level flux scheme path from RunPeriods.json."""
+    base_period = str(run_period).replace("_AMO", "").replace("_FFS", "")
+    if base_period == "FULL2018":
+        raise ValueError("FULL2018 flux studies require an explicit FLUX_BINNING_SCHEME")
+    runperiods_path = os.path.join(rbhg_home_dir, "RunPeriods.json")
+    with open(runperiods_path, "r") as runperiods_file:
+        period_data = json.load(runperiods_file).get(base_period, {})
+    return period_data.get("flux_binning_scheme", "")
 
 # Accounting for acceptance, cuts, and other attrition. Determined empirically.
 
@@ -1673,7 +1767,7 @@ def safe_workflow_name(name, maxlen=48):
     return f"{name[:maxlen-7]}_{short_hash}"
 
 
-def make_workflow_name(study_name, nametag, form_factor, run_period, PolDeg, lepton, internal_radiation, single_radiation=False, hypgeom_radiation=False):
+def make_workflow_name(study_name, nametag, form_factor, run_period, PolDeg, lepton, internal_radiation, single_radiation=False, hypgeom_radiation=False, flux_detector=None):
     parts = []
     radiation_mode = get_radiation_mode(internal_radiation, single_radiation, hypgeom_radiation)
     intrad = radiation_mode
@@ -1686,13 +1780,13 @@ def make_workflow_name(study_name, nametag, form_factor, run_period, PolDeg, lep
         parts.append(f"{nametag}_{form_factor}")
 
     # Use extend() to add multiple elements at once
-    parts.extend([run_period, PolDeg, intrad, lepton])
+    parts.extend([run_period, PolDeg, flux_detector, intrad, lepton])
     
     workflow_name = '_'.join(filter(None, parts))
     return safe_workflow_name(workflow_name)
 
-def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, directories, job_i, seed, nevents, lepton, experiment, ascii2hddm_script, hddm_run_number):
-    """Add swif2 job that passes seed, job_i, and nevents as command-line arguments to the executable"""
+def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, directories, job_i, seed, nevents, lepton, experiment, ascii2hddm_script, hddm_run_number, energy_args=None, job_label=None):
+    """Add a job with optional per-job photon-energy arguments."""
     exp_2_target = {
         "GlueX": "p",
         "CPP": "pb208"
@@ -1704,7 +1798,7 @@ def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, direct
     target = exp_2_target[experiment]
     particle = lepton_2_finalstate[lepton]
 
-    job_name_i = f"{workflow_name}_{job_i}"
+    job_name_i = f"{workflow_name}_{job_label or job_i}"
     RBHG_bash_script = stub_dict["RBHG_bash_script"]
     RBHG_bash_script_path = os.path.join(directories['template_directory'], RBHG_bash_script)
     stub_dict['RBHG_bash_script'] = RBHG_bash_script_path
@@ -1731,6 +1825,13 @@ def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, direct
     command_list.append(ENVFILE)
     # Build Fortran command as single string EXACTLY like hddm_command
     fortran_command = f"{leptonexe} {seed} {job_i} {nevents}"
+    if energy_args:
+        fortran_command += (
+            f" --energy-override"
+            f" {energy_args['energy_low_GeV']:.9f}"
+            f" {energy_args['energy_high_GeV']:.9f}"
+            f" {energy_args['energy_center_GeV']:.9f}"
+        )
     command_list.append(fortran_command)
     command_list.append(directories['vectorspath']) # cd to vectors path in bash script
     # Build hddm command as single string (SAME format as fortran_command)
@@ -1749,7 +1850,7 @@ def swif2_add_job_with_args(stub_dict, workflow_name, ENVFILE, leptonexe, direct
     subprocess.run(command_list)
 
 
-def run_job_locally_with_args(ENVFILE, leptonexe, directories, job_i, seed, nevents, lepton, experiment, ascii2hddm_script, hddm_run_number, RBHG_script):
+def run_job_locally_with_args(ENVFILE, leptonexe, directories, job_i, seed, nevents, lepton, experiment, ascii2hddm_script, hddm_run_number, RBHG_script, energy_args=None):
     """Run job locally - directly execute Fortran and HDDM conversion without shell wrapper"""
     exp_2_target = {
         "GlueX": "p",
@@ -1766,6 +1867,12 @@ def run_job_locally_with_args(ENVFILE, leptonexe, directories, job_i, seed, neve
     
     # Run Fortran executable directly
     fortran_command = [leptonexe, str(seed), str(job_i), str(nevents)]
+    if energy_args:
+        fortran_command.extend([
+            f"{energy_args['energy_low_GeV']:.9f}",
+            f"{energy_args['energy_high_GeV']:.9f}",
+            f"{energy_args['energy_center_GeV']:.9f}"
+        ])
     fortran_result = subprocess.run(fortran_command, capture_output=False, cwd=directories['vectorspath'])
     
     if fortran_result.returncode != 0:
@@ -1952,6 +2059,40 @@ else:
     ffs_dataset_configs = None
     run_period_master_configs = {}  # Collect configs for Level 2 master (if preset)
 
+flux_scheme = None
+if fluxStudy:
+    if is_ffs:
+        raise ValueError("FLUX_STUDY cannot be combined with the _FFS run-period suffix")
+    if lepton != "ee":
+        raise ValueError("FLUX_STUDY requires LEPTON=ee")
+    flux_scheme_setting = FLUX_BINNING_SCHEME or load_runperiod_flux_scheme(RUN_PERIOD, FrameworkHomeDirectory)
+    if not flux_scheme_setting:
+        raise ValueError(
+            "No flux binning scheme configured. Set FLUX_BINNING_SCHEME or add "
+            "flux_binning_scheme to the selected RunPeriods.json entry."
+        )
+    flux_scheme = load_flux_binning_scheme(flux_scheme_setting)
+    flux_systems = parse_flux_tagger_systems(FLUX_TAGGER_SYSTEMS)
+
+    # Expand each run-period/polarization into one independent workflow per
+    # selected tagger system. Values retain the physical polarization name.
+    expanded_run_configs = {}
+    for flux_run_period, flux_polarizations in actual_run_configs.items():
+        expanded_run_configs[flux_run_period] = {}
+        for flux_polarization in flux_polarizations:
+            for flux_detector in flux_systems:
+                expanded_run_configs[flux_run_period][f"{flux_polarization}|{flux_detector}"] = {
+                    "polarization": flux_polarization,
+                    "detector": flux_detector
+                }
+    actual_run_configs = expanded_run_configs
+
+    print("Flux study enabled:")
+    print(f"  Scheme: {flux_scheme['path']}")
+    print(f"  Systems: {', '.join(flux_systems)}")
+    print(f"  Events per counter: {FLUX_EVENTS_PER_COUNTER}")
+    print(f"  Energy half-width: {FLUX_ENERGY_HALF_WIDTH_MEV} MeV")
+
 # Loop through FFS datasets (or single dataset for normal mode)
 for dataset in ffs_datasets:
     current_nametag = dataset["nametag"]
@@ -1964,19 +2105,28 @@ for dataset in ffs_datasets:
     
     # Loop through run periods and polarizations
     for run_period, polarizations in actual_run_configs.items():
-        for polarization, events in polarizations.items():
+        for polarization_key, events in polarizations.items():
+            flux_detector = None
+            if fluxStudy:
+                polarization = events["polarization"]
+                flux_detector = events["detector"]
+                events = FLUX_EVENTS_PER_COUNTER * len(flux_scheme["counters"][flux_detector])
+            else:
+                polarization = polarization_key
             print(f"Run Period: {run_period}, Polarization: {polarization}, Events: {events}")
+
+            effective_nametag = f"{current_nametag}_{flux_detector}" if flux_detector else current_nametag
             
             # Check if output already exists (resumption logic)
             if SKIP_EXISTING_OUTPUTS:
                 exists, config_path, reason = check_output_exists(
                     RBHGHomeDirectory + "/output/RBHG",
-                    study_name, current_nametag, current_form_factor, 
+                    study_name, effective_nametag, current_form_factor,
                     run_period, polarization
                 )
                 if exists:
                     print(f"\n{'='*60}")
-                    print(f">> SKIPPING: {current_nametag}_{current_form_factor} / {run_period}_{polarization}")
+                    print(f">> SKIPPING: {effective_nametag}_{current_form_factor} / {run_period}_{polarization}")
                     print(f"   Reason: {reason}")
                     print(f"   Config: {config_path}")
                     print(f"   (Set SKIP_EXISTING_OUTPUTS = False to regenerate)")
@@ -1996,6 +2146,13 @@ for dataset in ffs_datasets:
             # Automatic configuration for AMO (Amorphous/unpolarized) data
             current_BH_xsctn = BH_xsctn_formulation
             current_CobremsDistribution = CobremsDistribution
+            current_integral_xsection = integral_xsection
+            if fluxStudy:
+                # A coherent-bremsstrahlung file is not meaningful for a
+                # 0.1 MeV counter-center sample. The legacy 1/E factor varies
+                # negligibly across this interval.
+                current_CobremsDistribution = False
+                current_integral_xsection = True
             if PolDeg == "AMO":
                 current_BH_xsctn = "Heitler"    # AMO data should use unpolarized Heitler formulation
                 current_CobremsDistribution = False  # AMO data should use 1/E distribution
@@ -2012,7 +2169,7 @@ for dataset in ffs_datasets:
             "RBHGHIST_PHI_JT": Fortran_TorF(hist_phi_of_JT),
             "RBHGHIST_EGAMMA": Fortran_TorF(hist_Egamma),
             "RBHGOUTPUT_EVENT": Fortran_TorF(ascii_vector_output),
-            "RBHGINTEGRAL_XSCTN": Fortran_TorF(integral_xsection),  
+            "RBHGINTEGRAL_XSCTN": Fortran_TorF(current_integral_xsection),
             "RBHGVERBOSE_OUTPUT": Fortran_TorF(verbose_output),     
             ####
             "RBHGBAKMAEV": Fortran_TorF(current_BH_xsctn == "Bakmaev"),  # B.H. cross section - Bakmaev's formulation. Do not use, unless you have a good reason to.
@@ -2031,10 +2188,14 @@ for dataset in ffs_datasets:
         }
 
             job_i = 0 
-            total_jobs = math.ceil(int(nevents_total)/int(nevents_perfile))
+            if fluxStudy:
+                total_jobs = len(flux_scheme["counters"][flux_detector])
+                nevents_perfile = str(FLUX_EVENTS_PER_COUNTER)
+            else:
+                total_jobs = math.ceil(int(nevents_total)/int(nevents_perfile))
 
             # Create a name that accurately describes the generator's configuration for output directories
-            gen_dir_name = make_generation_dirname(study_name, current_nametag, current_form_factor, polarization, run_period, lepton, current_BH_xsctn, nevents_total,
+            gen_dir_name = make_generation_dirname(study_name, effective_nametag, current_form_factor, polarization, run_period, lepton, current_BH_xsctn, nevents_total,
                                                   RUN_PERIOD, current_tenx_flag, Experiment, RBHGfortranVer, internal_radiation, single_radiation, hypgeom_radiation)
             print(f"Generation directory name = {gen_dir_name}")
 
@@ -2042,7 +2203,7 @@ for dataset in ffs_datasets:
             hddm_run_number = get_run_number(Experiment, run_period, PolDeg, default_periods=DEFAULTS)
             
             # Generate workflow name and check for conflicts BEFORE creating directories
-            workflow_name_base = make_workflow_name(study_name, current_nametag, current_form_factor, run_period, polarization, lepton, internal_radiation, single_radiation, hypgeom_radiation)
+            workflow_name_base = make_workflow_name(study_name, current_nametag, current_form_factor, run_period, polarization, lepton, internal_radiation, single_radiation, hypgeom_radiation, flux_detector)
             workflow_name = f"gen_{workflow_name_base}"  # Add generation prefix
             
             if not INTERACTIVE_MODE:
@@ -2074,12 +2235,12 @@ for dataset in ffs_datasets:
             
             output_settings = {
                 "ascii_vector_output": ascii_vector_output,
-                "integral_xsection": integral_xsection,
+                "integral_xsection": current_integral_xsection,
                 "verbose_output": verbose_output
             }
             
             config = create_rbhg_config(
-                study_name, current_nametag, current_form_factor, lepton, current_BH_xsctn,
+                study_name, effective_nametag, current_form_factor, lepton, current_BH_xsctn,
                 Experiment, PolDeg, nevents_total, nevents_perfile, internal_radiation,
                 current_CobremsDistribution, RUN_PERIOD, current_tenx_flag, RBHGfortranVer,
                 histogram_settings, output_settings, experiment_parameters, alldirs,
@@ -2090,12 +2251,13 @@ for dataset in ffs_datasets:
             
             # Collect config for Level 2 master (run period coordination) if needed
             if needs_run_period_master:
-                dataset_key = f"{current_nametag}_{current_form_factor}"
+                dataset_key = f"{effective_nametag}_{current_form_factor}"
                 if dataset_key not in run_period_master_configs:
                     run_period_master_configs[dataset_key] = {}
                 if run_period not in run_period_master_configs[dataset_key]:
                     run_period_master_configs[dataset_key][run_period] = {}
-                run_period_master_configs[dataset_key][run_period][polarization] = config
+                master_pol_key = f"{polarization}_{flux_detector}" if flux_detector else polarization
+                run_period_master_configs[dataset_key][run_period][master_pol_key] = config
             
             # Collect config for Level 3 master (FFS coordination) if needed
             if is_ffs:
@@ -2116,11 +2278,13 @@ for dataset in ffs_datasets:
             print(f"{'='*60}")
             job_params = []
             job_i = 0
+            flux_rows = flux_scheme["counters"][flux_detector] if fluxStudy else None
+            flux_half_width_GeV = FLUX_ENERGY_HALF_WIDTH_MEV / 1000.0
             
             while job_i < total_jobs:
                 # handle the case where a user has requested a total number events not equally divisible by nevents_perfile:
                 current_nevents_perfile = nevents_perfile
-                if (job_i + 1) == total_jobs:
+                if not fluxStudy and (job_i + 1) == total_jobs:
                     if (int(nevents_total) % int(nevents_perfile) != 0):
                         current_nevents_perfile = str(int(nevents_total) % int(nevents_perfile))
                 
@@ -2128,17 +2292,40 @@ for dataset in ffs_datasets:
                 latest_seed, updated_list_of_seeds = append_unique_seed(list_of_seeds)
                 list_of_seeds = updated_list_of_seeds
                 
-                job_params.append({
+                job_param = {
                     'job_i': job_i,
                     'seed': latest_seed,
                     'nevents': current_nevents_perfile
-                })
+                }
+                if fluxStudy:
+                    flux_row = flux_rows[job_i]
+                    energy_center = flux_row["energy_center_GeV"]
+                    job_param.update({
+                        "detector": flux_detector,
+                        "counter": flux_row["counter"],
+                        "job_label": f"{flux_detector}_{flux_row['counter']:03d}",
+                        "energy_low_GeV": energy_center - flux_half_width_GeV,
+                        "energy_high_GeV": energy_center + flux_half_width_GeV,
+                        "energy_center_GeV": energy_center
+                    })
+                job_params.append(job_param)
                 job_i += 1
             
             print(f"Job parameters generated!\n")
             
             # Add job parameters to config for audit trail
             config['rbhg_config']['job_parameters'] = job_params
+            if fluxStudy:
+                config['rbhg_config']['flux_study'] = {
+                    "enabled": True,
+                    "detector": flux_detector,
+                    "counter_count": len(job_params),
+                    "events_per_counter": FLUX_EVENTS_PER_COUNTER,
+                    "energy_half_width_MeV": FLUX_ENERGY_HALF_WIDTH_MEV,
+                    "energy_total_width_MeV": 2.0 * FLUX_ENERGY_HALF_WIDTH_MEV,
+                    "binning_scheme": flux_scheme["path"],
+                    "scheme_metadata": flux_scheme["metadata"]
+                }
             
             # Update the config file with job parameters
             config_file = write_rbhg_config(config, alldirs['output_directory'])
@@ -2189,7 +2376,8 @@ for dataset in ffs_datasets:
                 for params in job_params:
                     print(f"Running job {params['job_i']}/{total_jobs}...")
                     run_job_locally_with_args(ENVFILE, fortranexe, alldirs, params['job_i'], params['seed'], 
-                                             params['nevents'], lepton, Experiment, ascii2hddm_script, hddm_run_number, RBHG_script)
+                                             params['nevents'], lepton, Experiment, ascii2hddm_script, hddm_run_number, RBHG_script,
+                                             energy_args=params if fluxStudy else None)
             else:
                 print(f"{'='*60}")
                 print(f"Submitting {total_jobs} jobs to swif2...")
@@ -2199,7 +2387,9 @@ for dataset in ffs_datasets:
                         print(f"Submitting job {params['job_i']}/{total_jobs}...")
                     swif2_add_job_with_args(swif_addjob_dict_stub, workflow_name, ENVFILE, fortranexe, alldirs, 
                                            params['job_i'], params['seed'], params['nevents'], lepton, Experiment, 
-                                           ascii2hddm_script, hddm_run_number)
+                                           ascii2hddm_script, hddm_run_number,
+                                           energy_args=params if fluxStudy else None,
+                                           job_label=params.get('job_label'))
                 
                 print(f"\nAll {total_jobs} jobs submitted to workflow '{workflow_name}'!")
                 
@@ -2218,7 +2408,7 @@ if needs_run_period_master and run_period_master_configs:
     print(f"{'='*60}")
     
     for dataset_key, run_period_data in run_period_master_configs.items():
-        dataset_name, form_factor = dataset_key.split('_', 1)
+        dataset_name, form_factor = dataset_key.rsplit('_', 1)
         
         print(f"Creating master config for {dataset_name}_{form_factor}...")
         master_config = create_run_period_master_config(
@@ -2256,5 +2446,3 @@ elif needs_run_period_master and run_period_master_files:
     for file in run_period_master_files:
         rel_path = file.replace(outputDirectoryTop + '/', '')
         print(f"  python prepareSimulation.py --run-period-config {rel_path}")
-
-

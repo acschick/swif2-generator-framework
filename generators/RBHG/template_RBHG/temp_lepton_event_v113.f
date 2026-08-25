@@ -97,8 +97,10 @@ c
 	character(len=200) :: genDir, vectors, hists, outputDirTop, oFile
 	character(len=200) :: Whist, Xhist, Thist,Tvarhist, Elashist 
 	character(len=200) :: MMhist, Thetahist, JThist, Egammahist
-	character(len=20) :: arg_seed, arg_jobnum, arg_nevents
+	character(len=40) :: arg_seed, arg_jobnum, arg_nevents,
+     & arg_E_lo, arg_E_hi, arg_E_coherent
 	integer :: num_args, arg_seed_int, arg_jobnum_int, arg_nevents_int
+	real*8 arg_E_lo_real,arg_E_hi_real,arg_E_coherent_real
 
 	data itest(1),itest(2),itest(3),itest(4),nevent 
      &	/100000,1000000,10000000,100000000,RBHGNEVENTS/  !the variable nevent is where you set the number of output events.
@@ -175,10 +177,14 @@ c	Initialize histogram arrays, parameters
 c
 c	Command-line argument support for job parameters
 c	=====================================================
-c	This executable accepts 3 optional command-line arguments:
+c	This executable accepts 3 required job arguments and 3 optional
+c	per-job energy arguments:
 c	  Argument 1: Random seed (integer)
 c	  Argument 2: Job number (integer, used in output filenames)
 c	  Argument 3: Number of events to generate (integer)
+c	  Argument 4: Minimum photon energy E_lo (GeV)
+c	  Argument 5: Maximum photon energy E_hi (GeV)
+c	  Argument 6: Cross-section evaluation energy E_coherent (GeV)
 c
 c	The compiled-in values RBHGSEEDVALUE, RBHGJOBNUMBER, RBHGNEVENTS
 c	represent the FIRST job's parameters (job 0). When running multiple
@@ -193,8 +199,10 @@ c	The complete job parameter history is saved in rbhg_config.json
 c	in the job_parameters array for full audit trail.
 c	=====================================================
 c
-c	Parse command-line arguments (seed, job_number, nevents)
+c	Parse command-line arguments (seed, job_number, nevents). Energy
+c	arguments are parsed after the compiled experiment settings are loaded.
 c	Usage: ./lepton_event_v113.exe <seed> <job_num> <nevents>
+c	       [E_lo E_hi E_coherent]
 	num_args = command_argument_count()
 	if (num_args >= 3) then
 		call get_command_argument(1, arg_seed)
@@ -311,6 +319,33 @@ c
 	   theta_min=RBHG_THETAMIN_CPP
 	   theta_max=RBHG_THETAMAX_CPP
 	end if
+C
+c	Optional per-job energy override. Normal RBHG jobs omit these arguments
+c	and retain the compiled configuration values above.
+	if (num_args.ge.6) then
+	   call get_command_argument(4, arg_E_lo)
+	   call get_command_argument(5, arg_E_hi)
+	   call get_command_argument(6, arg_E_coherent)
+	   read(arg_E_lo, *) arg_E_lo_real
+	   read(arg_E_hi, *) arg_E_hi_real
+	   read(arg_E_coherent, *) arg_E_coherent_real
+	   if (arg_E_lo_real.le.0.d0 .or.
+     &     arg_E_hi_real.le.arg_E_lo_real .or.
+     &     arg_E_coherent_real.lt.arg_E_lo_real .or.
+     &     arg_E_coherent_real.gt.arg_E_hi_real) then
+	      print *, 'ERROR: invalid runtime energy bounds: ',
+     &        arg_E_lo_real,arg_E_hi_real,arg_E_coherent_real
+	      stop 2
+	   endif
+	   E_lo=arg_E_lo_real
+	   E_hi=arg_E_hi_real
+	   E_coherent=arg_E_coherent_real
+	   print *, 'Runtime energies: E_lo=',E_lo,' E_hi=',E_hi,
+     &        ' E_coherent=',E_coherent
+	else if (num_args.gt.3) then
+	   print *, 'ERROR: energy override requires arguments 4, 5, and 6'
+	   stop 2
+	endif
 C       
 c       .  Set target mass in GeV
 	mtgt=Atgt(ztgt)*.931494
@@ -2298,5 +2333,4 @@ c*******************************************************************
 
 
 				
-
 

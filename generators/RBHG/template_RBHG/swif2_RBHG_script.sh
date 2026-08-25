@@ -7,25 +7,32 @@ source /group/halld/Software/build_scripts/gluex_env_boot_jlab.sh
 # $3 = seed
 # $4 = job number
 # $5 = nevents
-# $6 = vectorspath
-# $7+ = python hddm conversion command (multiple args)
+# Flux jobs add: $6=--energy-override, $7=E_lo, $8=E_hi,
+# $9=E_coherent, $10=vectorspath, and $11+=HDDM command.
+# Normal jobs retain $6=vectorspath and $7+=HDDM command.
 
 ENVFILE="$1"
 FORTRAN_EXE="$2"
 SEED="$3"
 JOBNUM="$4"
 NEVENTS="$5"
-VECTORSPATH="$6"
-# Everything from $7 onward is the HDDM conversion command
-shift 6
+ENERGY_ARGS=()
+if [ "$6" = "--energy-override" ]; then
+    ENERGY_ARGS=("$7" "$8" "$9")
+    VECTORSPATH="${10}"
+    shift 10
+else
+    VECTORSPATH="$6"
+    shift 6
+fi
 HDDM_CMD=("$@")
 
 # Set up environment
 gxenv "$ENVFILE"
 
 # Run Fortran executable with command-line arguments
-echo "About to run Fortran: $FORTRAN_EXE $SEED $JOBNUM $NEVENTS"
-"$FORTRAN_EXE" "$SEED" "$JOBNUM" "$NEVENTS"
+echo "About to run Fortran: $FORTRAN_EXE $SEED $JOBNUM $NEVENTS ${ENERGY_ARGS[*]}"
+"$FORTRAN_EXE" "$SEED" "$JOBNUM" "$NEVENTS" "${ENERGY_ARGS[@]}"
 exitcode=$?
 echo "Fortran executable completed with exit code: $exitcode"
 
@@ -42,4 +49,3 @@ cd "$VECTORSPATH" || exit 1
 # Run HDDM conversion
 echo "Running HDDM conversion: ${HDDM_CMD[@]}"
 "${HDDM_CMD[@]}"
-

@@ -165,6 +165,7 @@
   },
   "2205": {
     "description": "2022 CPP data 100500–101622",
+    "flux_binning_scheme": "{FRAMEWORK_HOME}/generators/RBHG/energy_binning/cpp_2022_mean_endpoint_11p549508.txt",
     "experiment": "CPP/NPP",
     "run_range": "100500-101622",
     "recon_env": "/group/halld/www/halldweb/html/halld_versions/version.xml",

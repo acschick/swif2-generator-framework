@@ -83,6 +83,7 @@ LOG_DIR_BASE                 /farm_out/YOUR_USERNAME/my_logs/
 ## RBHG Configurations
 
 - **RBHG.config** - Fully annotated with all parameters explained
+- **RBHG_FluxStudy.config** - CPP 2022 counter-by-counter flux-study example
 - **RBHG_debug.config** - Small test run for debugging
 - **RBHG_Full2018amo.config** - Full 2018 Spring production
 
