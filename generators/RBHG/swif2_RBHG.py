@@ -357,6 +357,12 @@ CobremsFileCPP = get_config("COBREMS_FILE_CPP", "")                       # Over
 internal_radiation  = get_config("INTERNAL_RADIATION", True)              # Mo & Tsai, internally radiated brem. photon
 single_radiation    = get_config("SINGLE_RADIATION", False)             # v113 feature: if True, only one lepton radiates; if False, both leptons radiate
 hypgeom_radiation   = get_config("HYPGEOM_RADIATION", False)             # Future: hypergeometric radiation for muons (not implemented yet)
+energy_fraction_x_min = float(get_config("ENERGY_FRACTION_X_MIN", 0.0))
+energy_fraction_x_max = float(get_config("ENERGY_FRACTION_X_MAX", 1.0))
+if not (0.0 <= energy_fraction_x_min < energy_fraction_x_max <= 1.0):
+    raise ValueError(
+        "ENERGY_FRACTION_X_MIN/MAX must satisfy 0 <= X_MIN < X_MAX <= 1"
+    )
 # automatically overwritten if RUN_PERIOD != "" 
 PolDeg = str(get_config("POL_DEG", 45))                           # Set photon beam polarization orientation to '0', '90', '135', '45', or 'AMO'
 Experiment = get_config("EXPERIMENT", "GlueX")                      # "GlueX" or "CPP"
@@ -392,6 +398,8 @@ verbose_output        = get_config("VERBOSE_OUTPUT", False)              # Contr
 
 # Define GlueX and CPP Run Conditions                                                                                                                        
 experiment_parameters = {
+    "RBHG_XMIN": str(energy_fraction_x_min),
+    "RBHG_XMAX": str(energy_fraction_x_max),
     "RBHG_ELO_GLUEX": str(get_config("GLUEX_PHOTON_ENERGY_MIN", 7.0)),            # GlueX: Minimum photon energy to generate
     "RBHG_EHI_GLUEX": str(get_config("GLUEX_PHOTON_ENERGY_MAX", 11.8)),           # GlueX: Maximum photon energy to generate
     "RBHG_ZTGT_GLUEX": "1",             # GlueX: Atomic number of Hydrogen (target)
@@ -521,6 +529,8 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
     exp_params = {
         "photon_energy_min_GeV": float(experiment_parameters[f"RBHG_ELO{exp_suffix}"]),
         "photon_energy_max_GeV": float(experiment_parameters[f"RBHG_EHI{exp_suffix}"]),
+        "energy_fraction_x_min": float(experiment_parameters["RBHG_XMIN"]),
+        "energy_fraction_x_max": float(experiment_parameters["RBHG_XMAX"]),
         "target_atomic_number": int(experiment_parameters[f"RBHG_ZTGT{exp_suffix}"]),
         "electron_beam_energy_GeV": float(experiment_parameters[f"RBHG_E0{exp_suffix}"]),
         "coherent_peak_edge_GeV": float(experiment_parameters[f"RBHG_ECOHERENT{exp_suffix}"]),

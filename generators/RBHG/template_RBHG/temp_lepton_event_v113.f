@@ -74,7 +74,8 @@ c
      &	data_array_mm(200),delta_k(3),Econs, 
      &	error_array(1:200),Egamma_max,E_hi,E_lo,Brem,E_coherent,Egamma,bin_width,
      &	x_value_lo,x_value_hi,delta_x_value,delta_q2_ratio,eta_rad,b_rad,Eloss1,Eloss2,p1,p2,E1,E2,JT(2),
-     &	test,E_rad,ks(3),elasticity,phiR,p1_tran,p2_tran,c1,c2,vec(3),sqrt2,count,delta
+     &	test,E_rad,ks(3),elasticity,phiR,p1_tran,p2_tran,c1,c2,vec(3),sqrt2,count,delta,
+     &	x_user_min,x_user_max,x_physical_min,x_physical_max
 	integer*4 iseed
 	integer*8 i,itest(4),nevent,j,nfail,bad_max,i_array,j_array, ztgt,phase_space
 	integer*8 nfail_bin(5),ibin	! For angle-binned rejection tracking
@@ -346,6 +347,18 @@ c	and retain the compiled configuration values above.
 	   print *, 'ERROR: energy override requires arguments 4, 5, and 6'
 	   stop 2
 	endif
+C
+c	Configured energy-fraction interval. Physical lepton-mass limits are
+c	intersected with this interval for integration and generation below.
+	x_user_min=RBHG_XMIN
+	x_user_max=RBHG_XMAX
+	if (x_user_min.lt.0.d0 .or. x_user_max.gt.1.d0 .or.
+     &    x_user_min.ge.x_user_max) then
+	   print *, 'ERROR: invalid configured x range: ',
+     &        x_user_min,x_user_max
+	   stop 3
+	endif
+	print *, 'Configured x range: ',x_user_min,' to ',x_user_max
 C       
 c       .  Set target mass in GeV
 	mtgt=Atgt(ztgt)*.931494
@@ -433,7 +446,8 @@ c	cross_max=0.
 		if (i == 1) print *, 'Entered inner loop, calling xsctn...'
 25		continue
 		Egamma=ZBQLUAB(E_lo,E_hi)	!get tagged photon energy
-		x1=0.5		!x_min+(x_max-x_min)*ZBQLUAB(zlo,zhi)	!make a guess for the energy fraction
+		x1=(max(x_user_min,m_part/Egamma)+
+     &       min(x_user_max,(Egamma-m_part)/Egamma))/2.d0
 		if (para) then 
 			phi1=90.*pi/180.	!2.*pi*ZBQLUAB(zlo,zhi)		!make a guess for phi1
 			phi2=270.*pi/180.	!2.*pi*ZBQLUAB(zlo,zhi)		!make a guess for phi2
@@ -481,8 +495,15 @@ c Loop over 4 samplings of the phase space at coherent peak, each a factor of x1
 c Set limits on energy fraction
 	if (integral_xsctn) then
 c
-	x_max=(E_coherent-m_part)/E_coherent
-	x_min=m_part/E_coherent
+	x_physical_max=(E_coherent-m_part)/E_coherent
+	x_physical_min=m_part/E_coherent
+	x_max=min(x_user_max,x_physical_max)
+	x_min=max(x_user_min,x_physical_min)
+	if (x_min.ge.x_max) then
+	   print *, 'ERROR: configured x range has no physical overlap at ',
+     &        E_coherent,' GeV'
+	   stop 3
+	endif
 c
 	total_xscn=0.
 	do j=1,4	!loop over 4 samplings of the phase space, each a factor of x10 larger, to see if the integrated
@@ -523,8 +544,15 @@ c
 c	Start event generation
 c
 c	Use the widest possible range in x by using the maximum accepted tagged photon energy, then test it
-	x_max=(E_hi-m_part)/E_hi	!largest possible x
-	x_min=m_part/E_hi		!smallest possible x
+	x_physical_max=(E_hi-m_part)/E_hi
+	x_physical_min=m_part/E_hi
+	x_max=min(x_user_max,x_physical_max)
+	x_min=max(x_user_min,x_physical_min)
+	if (x_min.ge.x_max) then
+	   print *, 'ERROR: configured x range has no physical overlap at ',
+     &        E_hi,' GeV'
+	   stop 3
+	endif
 c
 	nfail=0
 	bad_max=0
@@ -2333,4 +2361,3 @@ c*******************************************************************
 
 
 				
-
