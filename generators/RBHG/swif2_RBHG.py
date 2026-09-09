@@ -867,6 +867,10 @@ def create_run_period_master_config(study_name, dataset_name, form_factor, RUN_P
     total_directories = sum(len(configs) for configs in polarization_configs.values())
     run_periods = list(polarization_configs.keys())
     
+    def directory_polarization_key(value):
+        """Flux detector is represented by the master config's parent directory."""
+        return re.sub(r'_(TAGH|TAGM)$', '', value)
+
     master_config = {
         "run_period_master_config": {
             "version": "1.0",
@@ -881,7 +885,7 @@ def create_run_period_master_config(study_name, dataset_name, form_factor, RUN_P
             },
             "run_periods": {
                 rp: {
-                    "polarizations": list(configs.keys()),
+                    "polarizations": [directory_polarization_key(pol) for pol in configs.keys()],
                     "total_directories": len(configs),
                     "includes_amo": "AMO" in configs
                 } for rp, configs in polarization_configs.items()
@@ -903,8 +907,8 @@ def create_run_period_master_config(study_name, dataset_name, form_factor, RUN_P
             },
             "batch_processing": {
                 "prepSim_command": f"python prepareSimulation.py {study_name}/{dataset_name}_{form_factor}/run_period_master_config.json",
-                "individual_configs": [f"{rp}_{pol}_*/rbhg_config.json" 
-                                     for rp, configs in polarization_configs.items() 
+                "individual_configs": [f"{rp}_{directory_polarization_key(pol)}_*/rbhg_config.json"
+                                     for rp, configs in polarization_configs.items()
                                      for pol in configs.keys()]
             }
         }

@@ -171,6 +171,39 @@ class FluxSimulationPreparationTest(unittest.TestCase):
             self.assertTrue(blocked_script.exists())
             self.assertIn("preparation is incomplete", blocked_script.read_text())
 
+    def test_existing_master_detector_pattern_finds_actual_flux_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / "2205_135DEG_DBLRAD_CPP_ee_Heitler_v113"
+            child.mkdir()
+            individual = child / "rbhg_config.json"
+            individual.write_text("{}")
+            master_path = root / "run_period_master_config.json"
+            master = {
+                "run_period_master_config": {
+                    "study_info": {
+                        "dataset_name": "FLUX_TAGH",
+                        "preset": "2205",
+                    },
+                    "batch_processing": {
+                        "individual_configs": [
+                            "2205_135DEG_TAGH_*/rbhg_config.json"
+                        ]
+                    },
+                }
+            }
+
+            with mock.patch.object(MODULE, "update_completion_status"), \
+                 mock.patch.object(MODULE, "load_and_validate_config", return_value=({}, "individual", 1)), \
+                 mock.patch.object(MODULE, "process_individual_directory", return_value={"success": True, "event_count": 50000, "merged_hddm_file": None}):
+                result = MODULE.process_run_period_master(
+                    master, str(master_path)
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(len(result["processed_configs"]), 1)
+            self.assertEqual(result["processed_configs"][0]["config_path"], str(individual))
+
 
 if __name__ == "__main__":
     unittest.main()

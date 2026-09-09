@@ -13,6 +13,8 @@ import argparse
 from pathlib import Path
 import math
 import shlex
+import glob
+import re
 # Add framework directories to Python path for imports
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)  # For swif2_common.py
@@ -1475,8 +1477,10 @@ def process_run_period_master(config_data, config_path, skim_percent=None):
         dict: Processing results
     """
     print(f"\nProcessing run period master configuration")
-    print(f"  Dataset: {config_data.get('dataset_name', 'Unknown')}")
-    print(f"  Run period: {config_data.get('run_period', 'Unknown')}")
+    master_data = config_data.get('run_period_master_config', config_data)
+    study_info = master_data.get('study_info', {})
+    print(f"  Dataset: {study_info.get('dataset_name', config_data.get('dataset_name', 'Unknown'))}")
+    print(f"  Run period: {study_info.get('preset', config_data.get('run_period', 'Unknown'))}")
     
     results = {
         'success': True,
@@ -1511,9 +1515,17 @@ def process_run_period_master(config_data, config_path, skim_percent=None):
         else:
             search_pattern = pattern
         
-        # Use glob to find matching files
-        import glob
         matching_files = glob.glob(search_pattern)
+
+        # Flux masters created before this fix included the detector twice:
+        # once in the parent directory and once in the child glob. Actual child
+        # directories are named 2205_135DEG_DBLRAD_..., not
+        # 2205_135DEG_TAGH_DBLRAD_.... Accept those existing master files.
+        if not matching_files:
+            corrected_pattern = re.sub(r'_(TAGH|TAGM)(?=_\*)', '', search_pattern)
+            if corrected_pattern != search_pattern:
+                print(f"      Retrying corrected flux pattern: {os.path.basename(os.path.dirname(corrected_pattern))}/{os.path.basename(corrected_pattern)}")
+                matching_files = glob.glob(corrected_pattern)
         
         if matching_files:
             actual_config_paths.extend(matching_files)
