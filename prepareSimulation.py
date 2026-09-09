@@ -12,6 +12,7 @@ import json
 import argparse
 from pathlib import Path
 import math
+import shlex
 # Add framework directories to Python path for imports
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)  # For swif2_common.py
@@ -378,6 +379,229 @@ def check_hddm_precision(hddm_file, num_events=5, particle_type='ee'):
         }
 
 
+def is_flux_study_config(config_data):
+    """Return True for an RBHG per-counter flux-study configuration."""
+    flux_settings = extract_config_value(config_data, ['rbhg_config.flux_study', 'flux_study'], {})
+    return bool(flux_settings and flux_settings.get('enabled', False))
+
+
+def mcwrapper_workflow_name(config_data):
+    """Return the simulation workflow name using the normal RBHG convention."""
+    generation_name = extract_config_value(config_data,
+        ['submission_status.workflow_name',
+         'rbhg_config.directory_paths.swif2_workflow_names.generation',
+         'swif2_workflow_names.generation',
+         'directory_paths.swif2_workflow_names.generation'], '')
+    if generation_name and generation_name.startswith('gen_'):
+        return ('SIM_' + generation_name[4:]).replace('_BC_FF', '_BCFF')
+
+    generation_dir = extract_config_value(config_data,
+        ['rbhg_config.directory_paths.rbhg_generation.output_directory',
+         'directory_paths.rbhg_generation.output_directory'], '')
+    return f"SIM_{os.path.basename(generation_dir)}" if generation_dir else 'SIM_Unknown'
+
+
+def flux_characteristic_run(config_data):
+    """Resolve the required single CPP characteristic run for a flux workflow."""
+    configured = extract_config_value(config_data,
+        ['rbhg_config.mcwrapper_settings.characteristic_run',
+         'mcwrapper_settings.characteristic_run'], None)
+    if configured:
+        return int(configured)
+
+    run_period_raw = str(extract_config_value(config_data,
+        ['rbhg_config.physics_settings.run_period', 'physics_settings.run_period', 'run_period'], ''))
+    run_period = run_period_raw.split('_')[0]
+    polarization_raw = str(extract_config_value(config_data,
+        ['rbhg_config.physics_settings.polarization_deg',
+         'physics_settings.polarization_deg', 'polarization_deg'], ''))
+    polarization = polarization_raw.upper()
+    if polarization != 'AMO' and not polarization.endswith('DEG'):
+        polarization += 'DEG'
+
+    framework_home = extract_config_value(config_data,
+        ['rbhg_config.directory_paths.base_paths.framework_home', 'framework_home'], script_dir)
+    with open(os.path.join(framework_home, 'RunPeriods.json'), 'r', encoding='utf-8') as stream:
+        run_periods = json.load(stream)
+    characteristic = (run_periods.get(run_period, {}).get('Polarizations', {})
+                      .get(polarization, {}).get('characteristic_run'))
+    if not characteristic:
+        raise ValueError(
+            f"No characteristic run found for run period {run_period}, polarization {polarization}"
+        )
+    return int(characteristic)
+
+
+def process_flux_individual_directory(config_data, config_path, vectors_dir, skim_percent=None):
+    """Prepare one MCWrapper request per RBHG flux-counter HDDM file."""
+    if skim_percent is not None:
+        raise ValueError('--skim is not supported for flux studies; every counter is required')
+
+    rbhg_config = config_data.get('rbhg_config', config_data)
+    flux_settings = rbhg_config.get('flux_study', {})
+    job_parameters = rbhg_config.get('job_parameters', [])
+    if not job_parameters:
+        raise ValueError('Flux study has no job_parameters in rbhg_config.json')
+
+    detector = str(flux_settings.get('detector', '')).upper()
+    expected_counter_count = int(flux_settings.get('counter_count', len(job_parameters)))
+    if len(job_parameters) != expected_counter_count:
+        raise ValueError(
+            f"Flux metadata expects {expected_counter_count} counters but job_parameters has "
+            f"{len(job_parameters)} entries"
+        )
+
+    characteristic_run = flux_characteristic_run(config_data)
+    workflow_name = mcwrapper_workflow_name(config_data)
+    mcwrapper_dir = os.path.join(os.path.dirname(vectors_dir), 'MCWrapper')
+    os.makedirs(mcwrapper_dir, exist_ok=True)
+    master_script = os.path.join(mcwrapper_dir, 'submit_all_flux_counters.sh')
+    with open(master_script, 'w', encoding='utf-8') as stream:
+        stream.write('#!/bin/bash\n')
+        stream.write('echo "Flux MCWrapper preparation is incomplete; rerun prepareSimulation.py." >&2\n')
+        stream.write('exit 1\n')
+    os.chmod(master_script, 0o755)
+
+    print(f"  Flux-study mode: preserving {len(job_parameters)} counter files (no merge)")
+    print(f"  Detector: {detector}; characteristic run: {characteristic_run}")
+    print(f"  Simulation workflow: {workflow_name}")
+
+    from hddm_event_utils import count_hddm_events
+    validation = []
+    failures = []
+
+    for position, job in enumerate(job_parameters):
+        job_index = int(job.get('job_i', position))
+        counter = int(job.get('counter', job_index + 1))
+        counter_detector = str(job.get('detector', detector)).upper()
+        counter_label = str(job.get('job_label') or f'{counter_detector}_{counter:03d}')
+        requested_events = int(job.get('nevents', flux_settings.get('events_per_counter', 0)))
+        if requested_events <= 0:
+            failures.append(f'{counter_label}: invalid requested event count {requested_events}')
+            continue
+
+        hddm_file = os.path.join(vectors_dir, f'vectors_{job_index}.hddm')
+        if not os.path.isfile(hddm_file):
+            failures.append(f'{counter_label}: missing {hddm_file}')
+            continue
+
+        actual_events = count_hddm_events(hddm_file, verbose=False)
+        validation.append({
+            'detector': counter_detector,
+            'counter': counter,
+            'job_i': job_index,
+            'job_label': counter_label,
+            'hddm_file': hddm_file,
+            'requested_events': requested_events,
+            'actual_events': actual_events,
+            'valid': actual_events == requested_events
+        })
+        if actual_events != requested_events:
+            failures.append(
+                f'{counter_label}: expected {requested_events} events, found {actual_events}'
+            )
+            continue
+
+    validation_block = {
+        'mode': 'per_counter',
+        'characteristic_run': characteristic_run,
+        'expected_files': len(job_parameters),
+        'validated_files': len(validation),
+        'prepared_files': 0,
+        'total_validated_events': sum(item['actual_events'] for item in validation),
+        'failures': failures,
+        'files': validation
+    }
+    rbhg_config['flux_simulation_validation'] = validation_block
+    with open(config_path, 'w', encoding='utf-8') as stream:
+        json.dump(config_data, stream, indent=2)
+
+    if failures:
+        sample = '\n'.join(f'    - {failure}' for failure in failures[:20])
+        extra = f"\n    ... and {len(failures) - 20} more" if len(failures) > 20 else ''
+        raise RuntimeError(
+            f"Flux validation failed for {len(failures)} counter(s):\n{sample}{extra}\n"
+            "The master submission script remains disabled."
+        )
+
+    prepared = []
+    for item in validation:
+        counter_label = item['job_label']
+        counter_dir = os.path.join(mcwrapper_dir, counter_label)
+        os.makedirs(counter_dir, exist_ok=True)
+        success = create_mcwrapper_config(
+            config_data, counter_dir, item['hddm_file'], item['requested_events'],
+            counter_label=counter_label,
+            batch_mode_override=1,
+            events_per_file_override=item['requested_events'],
+            run_range_override=characteristic_run
+        )
+        if not success:
+            raise RuntimeError(
+                f'{counter_label}: MCWrapper configuration creation failed; '
+                'the master submission script remains disabled'
+            )
+
+        script_name = 'gluex_MC_sub.sh' if extract_config_value(config_data,
+            ['rbhg_config.mcwrapper_settings.batch_system'], 'swif2') == 'swif2cont' \
+            else 'gluex_MC_sub.csh'
+        prepared.append({
+            'job_label': counter_label,
+            'job_i': item['job_i'],
+            'counter': item['counter'],
+            'hddm_file': item['hddm_file'],
+            'events': item['requested_events'],
+            'mcwrapper_directory': counter_dir,
+            'submission_script': os.path.join(counter_dir, script_name)
+        })
+
+    validation_block['prepared_files'] = len(prepared)
+    with open(config_path, 'w', encoding='utf-8') as stream:
+        json.dump(config_data, stream, indent=2)
+
+    with open(master_script, 'w', encoding='utf-8') as stream:
+        stream.write('#!/bin/bash\nset -euo pipefail\n\n')
+        stream.write(f'# Add {len(prepared)} per-counter jobs without starting the workflow.\n')
+        for item in prepared:
+            stream.write(shlex.quote(item['submission_script']) + '\n')
+        stream.write('\n# Start only after every counter job has been added successfully.\n')
+        stream.write('swif2 run ' + shlex.quote(workflow_name) + '\n')
+    os.chmod(master_script, 0o755)
+
+    manifest_path = os.path.join(mcwrapper_dir, 'flux_mcwrapper_manifest.json')
+    with open(manifest_path, 'w', encoding='utf-8') as stream:
+        json.dump({
+            'workflow_name': workflow_name,
+            'detector': detector,
+            'characteristic_run': characteristic_run,
+            'counter_jobs': prepared,
+            'master_submission_script': master_script
+        }, stream, indent=2)
+
+    total_events = sum(item['events'] for item in prepared)
+    details = {
+        'mode': 'per_counter_flux',
+        'characteristic_run': characteristic_run,
+        'counter_jobs': len(prepared),
+        'event_count': total_events,
+        'mcwrapper_directory': mcwrapper_dir,
+        'manifest': manifest_path,
+        'submission_script': master_script
+    }
+    update_completion_status(config_path, 'preparation', 'completed', details)
+    print(f"  Prepared {len(prepared)} counter-specific MCWrapper jobs")
+    print(f"  Master submission script: {master_script}")
+    return {
+        'success': True,
+        'merged_hddm_file': None,
+        'event_count': total_events,
+        'mcwrapper_created': True,
+        'flux_mode': True,
+        'counter_jobs': prepared,
+        'submission_script': master_script
+    }
+
+
 def process_individual_directory(config_data, config_path, skim_percent=None):
     """
     Process a single directory (Level 1 config)
@@ -422,6 +646,13 @@ def process_individual_directory(config_data, config_path, skim_percent=None):
             raise ValueError("Could not find vectors directory path in configuration")
         if not directory_name:
             raise ValueError("Could not find directory/study name in configuration")
+
+        # Flux studies must retain the one-file-per-counter mapping. They use
+        # a dedicated preparation path and never enter the normal merge path.
+        if is_flux_study_config(config_data):
+            return process_flux_individual_directory(
+                config_data, config_path, vectors_dir, skim_percent=skim_percent
+            )
         
         # Expected events per file - flexible field names
         expected_events_per_file = extract_config_value(config_data,
@@ -683,7 +914,9 @@ def process_individual_directory(config_data, config_path, skim_percent=None):
     
     return results
 
-def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual_event_count):
+def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual_event_count,
+                            counter_label=None, batch_mode_override=None,
+                            events_per_file_override=None, run_range_override=None):
     """
     Create MCWrapper configuration files using templates and preset configs
     
@@ -692,6 +925,10 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         mcwrapper_dir (str): MCWrapper directory path
         merged_hddm_file (str): Path to merged HDDM file
         actual_event_count (int): Actual number of events in merged HDDM file
+        counter_label (str): Optional unique label for a per-counter flux job
+        batch_mode_override (int): Optional MCWrapper batch mode override
+        events_per_file_override (int): Optional per-file event count override
+        run_range_override (int or str): Optional authoritative single run
         
     Returns:
         bool: True if successful
@@ -814,20 +1051,24 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         
         variation = mcw_settings.get('variation', 'mc')
         batch_system = mcw_settings.get('batch_system', 'swif2')
-        run_range = mcw_settings.get('run_range', '')
+        run_range = str(run_range_override) if run_range_override is not None else mcw_settings.get('run_range', '')
         
         # Determine if we should use characteristic run
         # Use characteristic run if:
         # 1. Explicitly requested via use_characteristic_run flag
         # 2. Background is disabled (NONE or empty) - requires single run for background matching
         use_characteristic = mcw_settings.get('USE_CHARACTERISTIC_RUN', mcw_settings.get('use_characteristic_run', False))
-        if not use_characteristic:
+        if run_range_override is not None:
+            use_characteristic = False
+            print(f"    Using explicit single run: {run_range}")
+        if run_range_override is None and not use_characteristic:
             # Check top-level config fields as a fallback
             use_characteristic = extract_config_value(config_data,
                 ['rbhg_config.mcwrapper_use_characteristic_run', 'rbhg_config.use_characteristic_run'], False)
         
         # If background is off, automatically use characteristic run
-        if not use_characteristic and (not bkg or bkg.upper() == 'NONE'):
+        if (run_range_override is None and not use_characteristic
+                and (not bkg or bkg.upper() == 'NONE')):
             use_characteristic = True
             print(f"    Background disabled (bkg={bkg}): automatically using characteristic run")
 
@@ -895,14 +1136,15 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
         clean_geant = mcw_settings.get('clean_geant', 1)
         clean_mcsmear = mcw_settings.get('clean_mcsmear', 1)
         clean_recon = mcw_settings.get('clean_recon', 0)
-        batch_mode = mcw_settings.get('batch_mode', 2)
+        batch_mode = batch_mode_override if batch_mode_override is not None else mcw_settings.get('batch_mode', 2)
         
         # Check for 10x flag - if set, use 100k events per file instead of 500k
         # This prevents jobs from running too long
         tenx_flag = extract_config_value(config_data,
             ['rbhg_config.event_counts.tenx_flag', 'event_counts.tenx_flag', 'tenx_flag'], False)
         default_per_file = 100000 if tenx_flag else 500000
-        events_per_file = mcw_settings.get('events_per_file', default_per_file)
+        events_per_file = (events_per_file_override if events_per_file_override is not None
+                           else mcw_settings.get('events_per_file', default_per_file))
         
         jana_config = mcw_settings.get('jana_config', '')
         # Fallback: if jana_config not provided in mcwrapper_settings, try to
@@ -997,6 +1239,8 @@ def create_mcwrapper_config(config_data, mcwrapper_dir, merged_hddm_file, actual
             output_base_dir = f"/volatile/halld/home/{username}/RBHG/{study_name}/{nametag_dir}/{gen_dir_name}/Simulation"
         else:
             output_base_dir = f"/volatile/halld/home/{username}/RBHG/{study_name}/{gen_dir_name}/Simulation"
+        if counter_label:
+            output_base_dir = os.path.join(output_base_dir, counter_label)
         
         # Get HDDM file size for disk request
         hddm_size_bytes = os.path.getsize(merged_hddm_file)
@@ -1123,7 +1367,8 @@ ANA_OS=CENTOS7"""
                 'RBHGSIMULATIONOSSETTING': container_os_lines.split('\n')[2] if container_os_lines else '',
                 'RBHGMCSMEAROSSETTING': container_os_lines.split('\n')[3] if container_os_lines else '',
                 'RBHGRECONOSSETTING': container_os_lines.split('\n')[4] if container_os_lines else '',
-                'RBHGANAOSSETTING': container_os_lines.split('\n')[5] if container_os_lines else ''
+                'RBHGANAOSSETTING': container_os_lines.split('\n')[5] if container_os_lines else '',
+                'RBHGTAGSETTING': f'TAG={counter_label}' if counter_label else ''
             }
             
             run_sed_replacement(mc_config_path, mc_replacements)
@@ -1177,6 +1422,8 @@ ANA_OS=CENTOS7"""
             # Log dir should be unique per workflow to avoid log file conflicts
             # Use workflow_name as the subdirectory (e.g., /farm_out/$USER/RBHG/FFS1/SIM_FFS1_BCFFN_1801_0DEG_ee/)
             logdir = os.path.join(farm_out_base, workflow_name)
+            if counter_label:
+                logdir = os.path.join(logdir, counter_label)
             # Ensure trailing slash for readability in configs
             if not logdir.endswith('/'):
                 logdir = logdir + '/'

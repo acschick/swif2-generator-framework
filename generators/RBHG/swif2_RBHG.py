@@ -380,6 +380,8 @@ MCWrapper_BackgroundVersion = get_config("MCWRAPPER_BACKGROUND_VERSION", "") # O
 MCWrapper_JanaConfig = get_config("MCWRAPPER_JANA_CONFIG_OVERRIDE", "")    # Override JANA config (blank = use RunPeriods.json default)
 MCWrapper_RCDBQuery = get_config("MCWRAPPER_RCDB_QUERY", "")               # Override RCDB query (blank = auto-generate from RunPeriods.json)
 MCWrapper_UseCharacteristicRun = get_config("MCWRAPPER_USE_CHARACTERISTIC_RUN", False) # Use characteristic run from RunPeriods.json
+MCWrapper_EventsPerFile = int(get_config("MCWRAPPER_EVENTS_PER_FILE", 500000))
+MCWrapper_BatchMode = int(get_config("MCWRAPPER_BATCH_MODE", 2))
 
 #### Histogram Control ####
 hist_invariantMass    = get_config("HIST_INVARIANT_MASS", True)            # Histogram output control for invariant mass W
@@ -488,22 +490,27 @@ def create_rbhg_config(study_name, nametag, form_factor, lepton, BH_xsctn_formul
     target = "p" if Experiment == "GlueX" else "pb208"
     
     # Load RunPeriods.json data for MCWrapper settings if run_period and polarization available
-    mcwrapper_settings = {}
+    mcwrapper_settings = {
+        "events_per_file": MCWrapper_EventsPerFile,
+        "batch_mode": MCWrapper_BatchMode
+    }
     if run_period and polarization and directories:
         rp_data = load_runperiods_data(run_period, polarization, FrameworkHomeDirectory)
         
         if rp_data:
             # Use explicit overrides from RBHG.config if set, otherwise use RunPeriods.json defaults
-            mcwrapper_settings = {
+            mcwrapper_settings.update({
                 "recon_env": MCWrapper_ReconEnv if MCWrapper_ReconEnv.strip() else rp_data.get("recon_env", ""),
                 "analysis_env": MCWrapper_AnalysisEnv if MCWrapper_AnalysisEnv.strip() else rp_data.get("analysis_env", ""),
                 "sim_env": MCWrapper_SimEnv if MCWrapper_SimEnv.strip() else rp_data.get("sim_env", ""),
                 "background_version": MCWrapper_BackgroundVersion if MCWrapper_BackgroundVersion.strip() else rp_data.get("background_version", ""),
                 "jana_config": MCWrapper_JanaConfig if MCWrapper_JanaConfig.strip() else rp_data.get("jana_epem_config", ""),
                 "batch_system": rp_data.get("batch_system", "swif2"),
+                "events_per_file": MCWrapper_EventsPerFile,
+                "batch_mode": MCWrapper_BatchMode,
                 "use_characteristic_run": MCWrapper_UseCharacteristicRun,
                 "characteristic_run": rp_data.get("characteristic_run", "")
-            }
+            })
             
             # Handle RCDB query - substitute {polDeg} placeholder if present
             if MCWrapper_RCDBQuery.strip():
@@ -895,7 +902,7 @@ def create_run_period_master_config(study_name, dataset_name, form_factor, RUN_P
                 ]
             },
             "batch_processing": {
-                "prepSim_command": f"python prepareSimulation.py --run-period-config {study_name}/{dataset_name}_{form_factor}/run_period_master_config.json",
+                "prepSim_command": f"python prepareSimulation.py {study_name}/{dataset_name}_{form_factor}/run_period_master_config.json",
                 "individual_configs": [f"{rp}_{pol}_*/rbhg_config.json" 
                                      for rp, configs in polarization_configs.items() 
                                      for pol in configs.keys()]
@@ -2336,6 +2343,12 @@ for dataset in ffs_datasets:
                     "binning_scheme": flux_scheme["path"],
                     "scheme_metadata": flux_scheme["metadata"]
                 }
+                config['rbhg_config']['downstream_configs']['mc_simulation'].update({
+                    "input_mode": "per_counter",
+                    "events_per_mc_file": FLUX_EVENTS_PER_COUNTER,
+                    "expected_input_files": len(job_params),
+                    "use_characteristic_run": True
+                })
             
             # Update the config file with job parameters
             config_file = write_rbhg_config(config, alldirs['output_directory'])
@@ -2445,7 +2458,7 @@ if is_ffs and ffs_dataset_configs:
     for file in run_period_master_files:
         print(f"  {file}")
     print(f"\nTo run prepareSimulation.py on all datasets:")
-    print(f"  python prepareSimulation.py --master-config {study_name}/ffs_master_config.json")
+    print(f"  python prepareSimulation.py {study_name}/ffs_master_config.json")
 
 elif needs_run_period_master and run_period_master_files:
     print(f"\nRun period coordination setup complete!")
@@ -2455,4 +2468,4 @@ elif needs_run_period_master and run_period_master_files:
     print(f"\nTo run prepareSimulation.py on this study:")
     for file in run_period_master_files:
         rel_path = file.replace(outputDirectoryTop + '/', '')
-        print(f"  python prepareSimulation.py --run-period-config {rel_path}")
+        print(f"  python prepareSimulation.py {rel_path}")
