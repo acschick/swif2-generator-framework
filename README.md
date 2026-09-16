@@ -21,14 +21,15 @@ Single π⁰ photoproduction generator for background studies and cross-section 
 
 **Future generators welcome!** This framework is designed to be extensible.
 
-## Quick Start
+## Quick Start: SWIF2 submission
 
 ```bash
 # 1. Setup environment
 source /group/halld/Software/gluex_env.sh
 gxenv
 
-# 2. Create configuration
+# 2. Create output directory and configuration
+mkdir -p output/RBHG
 cp GeneratorConfigExamples/RBHG.config my_study.config
 # Edit my_study.config for your physics parameters
 
@@ -41,6 +42,47 @@ python prepareSimulation.py <study_directory>
 # 5. Run DSelector analysis
 python swif2_RBHG_DSelector.py <study_directory>
 ```
+
+## Interactive/local run: 10,000 events on one core
+
+From the framework root on a JLab Linux host:
+
+```bash
+source /group/halld/Software/gluex_env.sh
+gxenv
+mkdir -p output/RBHG
+python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --local
+```
+
+`--interactive` is an equivalent alias; use either command:
+
+```bash
+python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --interactive
+```
+
+The [10k example](GeneratorConfigExamples/RBHG_10k_local.config) sets
+`FIXED_EVENT_COUNT True`, `NEVENTS_TOTAL 10000`, and `NEVENTS_PERFILE 10000`.
+It leaves `RUN_PERIOD` blank to select only `POL_DEG 90`, with `FLUX_STUDY`
+and `TENX_FLAG` disabled. Physics settings otherwise match `RBHG.config`:
+GlueX electron-positron production with internal radiation enabled.
+
+This compiles RBHG and runs one serial generator process, followed by ASCII-to-HDDM
+conversion. No core-count option is needed. Counts are configured in the file;
+there is no `--nevents` option. Omitting `--local`/`--interactive` submits to SWIF2,
+even when the config filename contains `local`. MC simulation and DSelector
+analysis are separate steps and are not started by this command.
+
+Results are written below `output/RBHG/interactive_10k/`, including `vectors/`,
+`hists/`, and `FortranFiles/` within the generated study structure. For a fresh
+rerun, copy the config and change `STUDY_NAME`; existing outputs may be skipped
+or existing directories rejected.
+
+The current local runner still creates directories under
+`/farm_out/<USERNAME>/RBHG/`, and requires GNU `sed`, `gfortran`, and a `python`
+environment with NumPy and `hddm_s`. It uses the current shell environment;
+`ENV_FILE` does not initialize local execution. `USERNAME {USER}` uses your login
+name. RBHG currently fixes generation output and log locations in code;
+`GENERATOR_OUTPUT_DIR_BASE` and `LOG_DIR_BASE` do not override them.
 
 ## Pipeline Phases
 
@@ -65,16 +107,17 @@ swif2-generator-framework/
 │   ├── SPIZG/
 │   └── CobremsDistributions/
 └── template_MCWrapper/           # MC simulation templates
-    └── JANAConfigs/
+    └── jana_configs/
 ```
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.7+ (`python` must select Python 3)
 - NumPy
 - HDDM Python bindings
 - Fortran compiler (gfortran)
-- JLab computing farm access
+- JLab Linux environment with GNU `sed` and writable framework and `/farm_out` directories
+- SWIF2 for batch submission (not needed for `--local`)
 - GlueX software stack
 
 ## Documentation

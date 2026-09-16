@@ -52,40 +52,56 @@ FRAMEWORK_HOME    /work/halld/home/YOUR_USERNAME/swif2-generator-framework
 
 ### Output Directories
 
-Edit these to match your JLab paths. You can use placeholders that will be automatically replaced:
-- `{GENERATOR_TYPE}` - Replaced with RBHG, SPIZG, etc.
-- `{USERNAME}` - Replaced with your username
-- `{FRAMEWORK_HOME}` - Replaced with framework root path
+RBHG currently writes generation results below `<FRAMEWORK_HOME>/output/RBHG/`
+and creates log directories below `/farm_out/<USERNAME>/RBHG/`, including in
+local mode. `GENERATOR_OUTPUT_DIR_BASE` and `LOG_DIR_BASE` are not currently
+honored by the RBHG directory creation code. Create `output/RBHG` before running.
 
-**Recommended paths** (automatically organized by generator):
-```
-GENERATOR_OUTPUT_DIR_BASE    {FRAMEWORK_HOME}/output/{GENERATOR_TYPE}/
-MCWRAPPER_OUTPUT_DIR_BASE    /volatile/halld/home/{USERNAME}/{GENERATOR_TYPE}/
-LOG_DIR_BASE                 /farm_out/{USERNAME}/{GENERATOR_TYPE}/
-```
+`MCWRAPPER_OUTPUT_DIR_BASE` configures the later simulation stage, typically
+`/volatile/halld/home/{USERNAME}/RBHG/`. Downstream settings can use `NESTED`
+(subdirectory of the preceding stage) or `SIBLING` (alongside it) where supported.
+See the annotated configs for stage-specific options.
 
-This creates separate directories for RBHG and SPIZG outputs:
-- `/volatile/halld/home/user/RBHG/` for RBHG simulations
-- `/volatile/halld/home/user/SPIZG/` for SPIZG simulations
+## Interactive/local 10,000-event example
 
-You can also use explicit paths without placeholders:
-```
-GENERATOR_OUTPUT_DIR_BASE    /work/halld/home/YOUR_USERNAME/generators/output/
-MCWRAPPER_OUTPUT_DIR_BASE    /volatile/halld/home/YOUR_USERNAME/custom_dir/
-LOG_DIR_BASE                 /farm_out/YOUR_USERNAME/my_logs/
+From the framework root, after loading the GlueX environment on a JLab Linux host:
+
+```bash
+mkdir -p output/RBHG
+python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --local
+# Equivalent alternative:
+python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --interactive
 ```
 
-**Directory organization modes**:
-- **EXPLICIT**: Uses base directory + study structure  
-- **NESTED**: Each step creates subdirectory in previous step's output
-- **SIBLING**: Steps create directories alongside each other at same level
+Run either command, once. Both flags select the same local execution mode.
+Omitting the flag submits to SWIF2, regardless of the config filename.
+The example runs one serial 10,000-event generator job, then converts the vectors
+to HDDM. It retains the physics settings of `RBHG.config` and sets:
+
+```text
+STUDY_NAME          interactive_10k
+FIXED_EVENT_COUNT   True
+NEVENTS_TOTAL       10000
+NEVENTS_PERFILE     10000
+RUN_PERIOD
+TENX_FLAG           False
+FLUX_STUDY         False
+```
+
+A blank `RUN_PERIOD` selects only the configured `POL_DEG` (90 in this example).
+There is no event-count or core-count command-line option. Counts go in the config.
+Change `STUDY_NAME` in a copy for a fresh rerun. See the
+[main README](../README.md#interactivelocal-run-10000-events-on-one-core) for
+output locations and local environment requirements, including `/farm_out`
+write access, GNU `sed`, `gfortran`, NumPy, and `hddm_s`.
 
 ## RBHG Configurations
 
 - **RBHG.config** - Fully annotated with all parameters explained
 - **RBHG_FluxStudy.config** - CPP 2022 counter-by-counter flux-study example
-- **RBHG_debug.config** - Small test run for debugging
-- **RBHG_Full2018amo.config** - Full 2018 Spring production
+- **RBHG_10k_local.config** - One 10,000-event job; run with `--local` or `--interactive`
+- **RBHG_CPP_FFS1.config** - CPP electron-pair form-factor study
+- **RBHG_CPP_FFS1_muons.config** - CPP muon-pair form-factor study
 
 ## SPIZG Configurations
 
@@ -93,25 +109,27 @@ LOG_DIR_BASE                 /farm_out/YOUR_USERNAME/my_logs/
 
 ## Configuration Format
 
-Simple key-value format:
+Use uppercase keys and whitespace-separated values, with no equals sign or quotes.
+Only the first two whitespace-separated fields are read; `#` starts a comment.
+A key on its own sets a blank value.
 
-```bash
+```text
 # Comments start with #
-parameter_name = value
-beam_energy = 8.4  # GeV
+NEVENTS_TOTAL       10000
+GLUEX_PHOTON_ENERGY_MIN 7.0  # GeV
+RUN_PERIOD                  # blank = one configured polarization
 ```
 
-## Common Parameters
-
-Standard across all generators:
+## RBHG Run Controls
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `run_period` | GlueX run period | `"2018-01"` |
-| `num_events` | Events per job | `50000` |
-| `num_jobs` | Parallel jobs | `100` |
-| `beam_energy` | Beam energy (GeV) | `8.4` |
-| `output_dir` | Output directory | `"MyStudy"` |
+| `RUN_PERIOD` | Run-period preset; blank selects one polarization | `1808` |
+| `FIXED_EVENT_COUNT` | Use explicit counts instead of preset statistics | `True` |
+| `NEVENTS_TOTAL` | Events per dataset/polarization in fixed-count mode | `10000` |
+| `NEVENTS_PERFILE` | Events per generator job/file | `10000` |
+| `POL_DEG` | Polarization when `RUN_PERIOD` is blank | `90` |
+| `STUDY_NAME` | Study output directory name | `interactive_10k` |
 
 ## Generator-Specific Parameters
 
@@ -121,7 +139,7 @@ See individual config files for physics parameters unique to each generator.
 
 ```bash
 # 1. Copy example
-cp RBHG.config my_study.config
+cp GeneratorConfigExamples/RBHG.config my_study.config
 
 # 2. Edit parameters
 vim my_study.config
