@@ -21,15 +21,34 @@ Single π⁰ photoproduction generator for background studies and cross-section 
 
 **Future generators welcome!** This framework is designed to be extensible.
 
+## One-time framework setup
+
+After cloning, run this from the framework root on your JLab Linux host:
+
+```bash
+python3 setup_framework.py
+```
+
+Setup detects your username, framework location, and shell (prompting if needed).
+It creates `output/RBHG` and `output/SPIZG`, attempts to create the configured
+`/volatile` output and real-data DSelector log directories, updates the example
+configs with your username, normalizes cobrems paths in `RunPeriods.json`, creates
+`data_dselector.config` if absent, and saves `framework_settings.json` for
+downstream scripts. No separate `mkdir` is needed after successful setup.
+Check any directory-creation warnings: setup continues if a directory cannot be
+created. Generator-specific study and log directories are created when jobs run.
+
+Setup configures the framework; it does not install dependencies or load the
+GlueX environment. Load that environment in each new shell as shown below.
+
 ## Quick Start: SWIF2 submission
 
 ```bash
-# 1. Setup environment
+# 1. Load environment (after one-time setup)
 source /group/halld/Software/gluex_env.sh
 gxenv
 
-# 2. Create output directory and configuration
-mkdir -p output/RBHG
+# 2. Copy and customize configuration
 cp GeneratorConfigExamples/RBHG.config my_study.config
 # Edit my_study.config for your physics parameters
 
@@ -45,12 +64,11 @@ python swif2_RBHG_DSelector.py <study_directory>
 
 ## Interactive/local run: 10,000 events on one core
 
-From the framework root on a JLab Linux host:
+After the one-time setup, from the framework root on a JLab Linux host:
 
 ```bash
 source /group/halld/Software/gluex_env.sh
 gxenv
-mkdir -p output/RBHG
 python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --local
 ```
 
@@ -96,6 +114,7 @@ name. RBHG currently fixes generation output and log locations in code;
 
 ```
 swif2-generator-framework/
+├── setup_framework.py            # One-time directories and user configuration
 ├── swif2_gen.py                  # Main dispatcher
 ├── swif2_common.py               # Shared utilities
 ├── prepareSimulation.py          # MC setup

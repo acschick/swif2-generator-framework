@@ -4,6 +4,10 @@ Example configuration files for event generators with detailed documentation.
 
 ## Quick Start
 
+Run `python3 setup_framework.py` once from the framework root after cloning.
+It creates the output directories and configures the examples for your username.
+See [one-time setup](../README.md#one-time-framework-setup) for details.
+
 1. **Copy a config file to your working directory:**
    ```bash
    cd /path/to/swif2-generator-framework
@@ -55,7 +59,8 @@ FRAMEWORK_HOME    /work/halld/home/YOUR_USERNAME/swif2-generator-framework
 RBHG currently writes generation results below `<FRAMEWORK_HOME>/output/RBHG/`
 and creates log directories below `/farm_out/<USERNAME>/RBHG/`, including in
 local mode. `GENERATOR_OUTPUT_DIR_BASE` and `LOG_DIR_BASE` are not currently
-honored by the RBHG directory creation code. Create `output/RBHG` before running.
+honored by the RBHG directory creation code. `setup_framework.py` creates
+`output/RBHG` during one-time setup.
 
 `MCWRAPPER_OUTPUT_DIR_BASE` configures the later simulation stage, typically
 `/volatile/halld/home/{USERNAME}/RBHG/`. Downstream settings can use `NESTED`
@@ -64,10 +69,10 @@ See the annotated configs for stage-specific options.
 
 ## Interactive/local 10,000-event example
 
-From the framework root, after loading the GlueX environment on a JLab Linux host:
+After one-time setup, from the framework root with the GlueX environment loaded
+on a JLab Linux host:
 
 ```bash
-mkdir -p output/RBHG
 python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --local
 # Equivalent alternative:
 python swif2_gen.py GeneratorConfigExamples/RBHG_10k_local.config --interactive
