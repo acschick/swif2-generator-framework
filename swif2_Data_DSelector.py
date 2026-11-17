@@ -62,6 +62,10 @@ def parse_config(config_path):
                 key, value = line.split('=', 1)
                 key = key.strip()
                 value = value.strip()
+
+                # Allow explanatory inline comments after a value. Require
+                # whitespace before "#" so a literal hash in a value is kept.
+                value = value.split(' #', 1)[0].rstrip()
                 
                 # Handle boolean values
                 if value.upper() in ['TRUE', 'FALSE']:
