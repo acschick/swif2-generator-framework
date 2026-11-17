@@ -127,7 +127,10 @@
       "DATA": {
         "ver08": {
           "tree_epemmissprot__B2_U1": "/mss/halld/RunPeriod-2018-08/analysis/ver08/tree_epemmissprot__B2_U1/merged"
-        }
+        },
+	  "ver28": {
+	      "tree_epemmissprot__B6": "/cache/halld/RunPeriod-2018-08/analysis/ver28/tree_epemmissprot__B6/merged/"
+	  }
       }
     },
     "Polarizations": {
