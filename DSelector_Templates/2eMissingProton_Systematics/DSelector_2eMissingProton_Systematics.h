@@ -185,15 +185,15 @@ class DSelector_2eMissingProton_Systematics : public DSelector
 		// Systematics configuration
 		static const int kNumMethods = 2;
 		static const int kNumPid = 3;
-		static const int kNumAngles = 27;
+		static const int kNumAngles = 52;
 		static const int kNumBeamRegions = 16;
-		static const int kNumMassRegions = 10;
-		static const int kNumWminCuts = 16;
-		static const int kNumChiSqCuts = 16;
-		static const int kNumMLPeeThresholds = 9;
-		static const int kNumMLPpiThresholds = 9;
-		static const int kNumBDTeeThresholds = 14;
-		static const int kNumBDTpiThresholds = 18;
+		static const int kNumMassRegions = 20;
+		static const int kNumWminCuts = 31;
+		static const int kNumChiSqCuts = 31;
+		static const int kNumMLPeeThresholds = 17;
+		static const int kNumMLPpiThresholds = 17;
+		static const int kNumBDTeeThresholds = 27;
+		static const int kNumBDTpiThresholds = 35;
 		static const int kNumBestChiSqCategories = 6;
 		static const int kNumBeamWindows = 2;
 		static const int kNumRunPeriods = 3;

@@ -1309,7 +1309,7 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 		Double_t locBunchPeriod = dAnalysisUtilities.Get_BeamBunchPeriod(Get_RunNumber());
 		Double_t locDeltaT_RF = dAnalysisUtilities.Get_DeltaT_RF(Get_RunNumber(), locBeamX4_Measured, dComboWrapper);
 		Int_t locRelBeamBucket = dAnalysisUtilities.Get_RelativeBeamBucket(Get_RunNumber(), locBeamX4_Measured, dComboWrapper); // 0 for in-time events, non-zero integer for out-of-time photons
-		Int_t locNumOutOfTimeBunchesInTree = 2; //YOU need to specify this number
+		Int_t locNumOutOfTimeBunchesInTree = 6; // B6 tree: six out-of-time bunches on each side
 			//Number of out-of-time beam bunches in tree (on a single side, so that total number out-of-time bunches accepted is 2 times this number for left + right bunches)
 
 		// Mark the first in-time combo encountered (chiSq-sorted) for this event.
@@ -1336,7 +1336,7 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 		if(fabs(locBeamDeltaT) < 0.5*4.008) { // prompt signal recieves a weight of 1
 			AccWeight = 1.;
 	    }
-	    else { // accidentals recieve a weight of 1/(# RF bunches included in TTree) which is 4 in this case
+	    else { // accidentals receive a weight of 1/(# out-of-time RF bunches included in the TTree)
 			AccWeight = -1./(2*locNumOutOfTimeBunchesInTree); //need to have the total number of buckets. Make the histogram wider to find out how many
 	    }
 
@@ -1365,6 +1365,7 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 		TLorentzVector loc2TrackP4_Measured = locPositiveP4_Measured + locNegativeP4_Measured;
 
 		double M2TrackKin = loc2TrackP4.M();  // Generic name for 2-track invariant mass
+		double M2TrackMeasured = loc2TrackP4_Measured.M();
 
 		double positive_phi = locPositiveP4.Phi();
 		double negative_phi = locNegativeP4.Phi();
@@ -1828,7 +1829,7 @@ Bool_t DSelector_2eMissingProton_Systematics::Process(Long64_t locEntry)
 		if(dRuntimeFillSwitches.fillSystematics) {
 			const bool includeQ2ResSystematics = (dIsMC && foundThrownParticles);
 			const Double_t q2kinRes = includeQ2ResSystematics ? (qvec2 - qvec2_thrown) : 0.0;
-			FillSystematics(comboCutInputs, qvec2, JTphi, M2TrackKin, q2kinRes, includeQ2ResSystematics, activeRunPeriodIndex, activePolarizationIndex, AccWeight);
+			FillSystematics(comboCutInputs, qvec2, JTphi, M2TrackMeasured, q2kinRes, includeQ2ResSystematics, activeRunPeriodIndex, activePolarizationIndex, AccWeight);
 		}
 
 		if(ThisComboIsBestChiSq){
@@ -2573,8 +2574,15 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 	dPidChoices[1] = "pi";
 	dPidChoices[2] = "none";
 
-	const double minAngles[kNumAngles] = {0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7,
-	  1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0};
+	const double minAngles[kNumAngles] = {
+		0.0,
+		0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95,
+		1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45,
+		1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
+		2.00, 2.05, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.45,
+		2.50, 2.55, 2.60, 2.65, 2.70, 2.75, 2.80, 2.85, 2.90, 2.95,
+		3.00
+	};
 	for (int i = 0; i < kNumAngles; ++i) {
 		dMinAngles[i] = minAngles[i];
 	}
@@ -2598,28 +2606,44 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 	}
 
 	const double massRegions[kNumMassRegions][2] = {
-		{0.250, 0.275}, {0.275, 0.300}, {0.300, 0.325}, {0.325, 0.350},
-		{0.350, 0.375}, {0.375, 0.400}, {0.400, 0.45}, {0.45, 0.50},
-		{0.50, 0.55}, {0.55, 0.60}
+		{0.2500, 0.2625}, {0.2625, 0.2750}, {0.2750, 0.2875}, {0.2875, 0.3000},
+		{0.3000, 0.3125}, {0.3125, 0.3250}, {0.3250, 0.3375}, {0.3375, 0.3500},
+		{0.3500, 0.3625}, {0.3625, 0.3750}, {0.3750, 0.3875}, {0.3875, 0.4000},
+		{0.4000, 0.4250}, {0.4250, 0.4500}, {0.4500, 0.4750}, {0.4750, 0.5000},
+		{0.5000, 0.5250}, {0.5250, 0.5500}, {0.5500, 0.5750}, {0.5750, 0.6000}
 	};
 	for (int i = 0; i < kNumMassRegions; ++i) {
 		dMassRegions[i][0] = massRegions[i][0];
 		dMassRegions[i][1] = massRegions[i][1];
 	}
 
-	const double minInvMass[kNumWminCuts] = {0, 0.05, 0.075, 0.1, 0.125,
-	  0.15, 0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.325, 0.35, 0.375, 0.4};
+	const double minInvMass[kNumWminCuts] = {
+		0.0000, 0.0250, 0.0500, 0.0625, 0.0750, 0.0875, 0.1000, 0.1125,
+		0.1250, 0.1375, 0.1500, 0.1625, 0.1750, 0.1875, 0.2000, 0.2125,
+		0.2250, 0.2375, 0.2500, 0.2625, 0.2750, 0.2875, 0.3000, 0.3125,
+		0.3250, 0.3375, 0.3500, 0.3625, 0.3750, 0.3875, 0.4000
+	};
 	for (int i = 0; i < kNumWminCuts; ++i) {
 		dMinInvMass[i] = minInvMass[i];
 	}
 
-	const double maxChiSq[kNumChiSqCuts] = {15., 14., 13., 12., 11., 10., 9., 8., 7., 6., 5., 4., 3., 2., 1., 0.5};
+	const double maxChiSq[kNumChiSqCuts] = {
+		15.0, 14.5, 14.0, 13.5, 13.0, 12.5, 12.0, 11.5, 11.0, 10.5,
+		10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5,
+		5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0, 0.75, 0.5
+	};
 	for (int i = 0; i < kNumChiSqCuts; ++i) {
 		dMaxChiSq[i] = maxChiSq[i];
 	}
 
-	const float mlpEe[kNumMLPeeThresholds] = {0.55f, 0.60f, 0.65f, 0.70f, 0.75f, 0.80f, 0.85f, 0.90f, 0.95f};
-	const float mlpPi[kNumMLPpiThresholds] = {0.45f, 0.40f, 0.35f, 0.30f, 0.25f, 0.20f, 0.15f, 0.10f, 0.05f};
+	const float mlpEe[kNumMLPeeThresholds] = {
+		0.550f, 0.575f, 0.600f, 0.625f, 0.650f, 0.675f, 0.700f, 0.725f, 0.750f,
+		0.775f, 0.800f, 0.825f, 0.850f, 0.875f, 0.900f, 0.925f, 0.950f
+	};
+	const float mlpPi[kNumMLPpiThresholds] = {
+		0.450f, 0.425f, 0.400f, 0.375f, 0.350f, 0.325f, 0.300f, 0.275f, 0.250f,
+		0.225f, 0.200f, 0.175f, 0.150f, 0.125f, 0.100f, 0.075f, 0.050f
+	};
 	for (int i = 0; i < kNumMLPeeThresholds; ++i) {
 		dMLPeeThresholds[i] = mlpEe[i];
 	}
@@ -2627,11 +2651,17 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 		dMLPpiThresholds[i] = mlpPi[i];
 	}
 
-	const float bdtEe[kNumBDTeeThresholds] = {-0.010f, 0.010f, 0.030f, 0.050f, 0.070f, 0.090f, 0.110f,
-		0.130f, 0.150f, 0.170f, 0.190f, 0.210f, 0.230f, 0.250f};
-	const float bdtPi[kNumBDTpiThresholds] = {-0.010f, -0.030f, -0.050f, -0.070f, -0.090f, -0.110f, -0.130f,
-		-0.150f, -0.170f, -0.190f, -0.210f, -0.230f, -0.250f, -0.270f,
-		-0.290f, -0.310f, -0.330f, -0.350f};
+	const float bdtEe[kNumBDTeeThresholds] = {
+		-0.010f, 0.000f, 0.010f, 0.020f, 0.030f, 0.040f, 0.050f, 0.060f, 0.070f,
+		0.080f, 0.090f, 0.100f, 0.110f, 0.120f, 0.130f, 0.140f, 0.150f, 0.160f,
+		0.170f, 0.180f, 0.190f, 0.200f, 0.210f, 0.220f, 0.230f, 0.240f, 0.250f
+	};
+	const float bdtPi[kNumBDTpiThresholds] = {
+		-0.010f, -0.020f, -0.030f, -0.040f, -0.050f, -0.060f, -0.070f, -0.080f, -0.090f,
+		-0.100f, -0.110f, -0.120f, -0.130f, -0.140f, -0.150f, -0.160f, -0.170f, -0.180f,
+		-0.190f, -0.200f, -0.210f, -0.220f, -0.230f, -0.240f, -0.250f, -0.260f, -0.270f,
+		-0.280f, -0.290f, -0.300f, -0.310f, -0.320f, -0.330f, -0.340f, -0.350f
+	};
 	for (int i = 0; i < kNumBDTeeThresholds; ++i) {
 		dBDTeeThresholds[i] = bdtEe[i];
 	}
@@ -2771,10 +2801,10 @@ void DSelector_2eMissingProton_Systematics::BookSystematics(void)
 				";M_{e^{+}e^{-}} Kin (GeV/c^{2})", 238, 0.0, 1.4);
 			dHist_Wepem_Measured_noCuts[i][j] = new TH1D(
 				Form("Wepem_Measured_%s_%s_noCuts", dMethods[i], dPidChoices[j]),
-				";M_{e^{+}e^{-}} Gen (GeV/c^{2})", 238, 0.0, 1.4);
+				";M_{e^{+}e^{-}} Measured (GeV/c^{2})", 238, 0.0, 1.4);
 			dHist_Wepem_Measured_fidCuts_noWcut[i][j] = new TH1D(
 				Form("Wepem_Measured_%s_%s_fidCuts_noWcut", dMethods[i], dPidChoices[j]),
-				";M_{e^{+}e^{-}} Gen (GeV/c^{2})", 238, 0.0, 1.4);
+				";M_{e^{+}e^{-}} Measured (GeV/c^{2})", 238, 0.0, 1.4);
 
 			for (int k = 0; k < kNumMassRegions; k++) {
 				invmassSysDir->cd();
